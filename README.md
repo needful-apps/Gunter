@@ -17,6 +17,36 @@ Gunter is a simple Flask-based web service that provides geolocation and WHOIS i
 
 ## Installation
 
+### Option 1: Container (empfohlen)
+
+1. **Docker:**
+   ```bash
+   # Container herunterladen
+   docker pull ghcr.io/needful-apps/gunter:latest
+   
+   # Container starten
+   docker run -d -p 6600:6600 --name gunter ghcr.io/needful-apps/gunter:latest
+   
+   # Container mit persistenten Daten starten
+   docker run -d -p 6600:6600 -v gunter_data:/app --name gunter ghcr.io/needful-apps/gunter:latest
+   ```
+
+2. **Podman:**
+   ```bash
+   # Container herunterladen
+   podman pull ghcr.io/needful-apps/gunter:latest
+   
+   # Container starten
+   podman run -d -p 6600:6600 --name gunter ghcr.io/needful-apps/gunter:latest
+   
+   # Container mit persistenten Daten starten
+   podman run -d -p 6600:6600 -v gunter_data:/app:Z --name gunter ghcr.io/needful-apps/gunter:latest
+   ```
+
+Der Server ist dann unter `http://localhost:6600` erreichbar.
+
+### Option 2: Lokale Installation
+
 1.  **Clone the repository:**
     ```bash
     git clone git@github.com:needful-apps/Gunter.git
@@ -64,11 +94,32 @@ Gunter is a simple Flask-based web service that provides geolocation and WHOIS i
 ## Example Usage
 
 ```bash
-# Geo-lookup for an IP
+# Geo-lookup für eine IP
 curl http://localhost:6600/api/geo-lookup/8.8.8.8
 
-# WHOIS lookup for an IP
+# WHOIS-Abfrage für eine IP
 curl http://localhost:6600/api/whois/8.8.8.8
+
+# Geo-lookup für eine Domain
+curl http://localhost:6600/api/geo-lookup/example.com
+
+# Statusabfrage der GeoLite2-Datenbank
+curl http://localhost:6600/api/status
+```
+
+### Docker-Compose
+
+Alternativ kann der Dienst auch mit Docker Compose gestartet werden:
+
+```bash
+# Starten des Dienstes
+docker-compose up -d
+
+# Starten des Dienstes mit Tests
+docker-compose up test
+
+# Kontinuierliche Testausführung (Testwatch)
+docker-compose up test-watch
 ```
 
 ## Contributing
