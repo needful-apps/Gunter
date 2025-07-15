@@ -43,7 +43,7 @@ Gunter is a simple Flask-based web service that provides geolocation and WHOIS i
    podman run -d -p 6600:6600 -v gunter_data:/app:Z --name gunter ghcr.io/needful-apps/gunter:latest
    ```
 
-Der Server ist dann unter `http://localhost:6600` erreichbar.
+The server will then be available at `http://localhost:6600`.
 
 ### Option 2: Lokale Installation
 
@@ -94,31 +94,31 @@ Der Server ist dann unter `http://localhost:6600` erreichbar.
 ## Example Usage
 
 ```bash
-# Geo-lookup für eine IP
+# Geo-lookup for an IP
 curl http://localhost:6600/api/geo-lookup/8.8.8.8
 
-# WHOIS-Abfrage für eine IP
+# WHOIS query for an IP
 curl http://localhost:6600/api/whois/8.8.8.8
 
-# Geo-lookup für eine Domain
+# Geo-lookup for a domain
 curl http://localhost:6600/api/geo-lookup/example.com
 
-# Statusabfrage der GeoLite2-Datenbank
+# Check GeoLite2 database status
 curl http://localhost:6600/api/status
 ```
 
 ### Docker-Compose
 
-Alternativ kann der Dienst auch mit Docker Compose gestartet werden:
+Alternatively, the service can be started with Docker Compose:
 
 ```bash
-# Starten des Dienstes
+# Start the service
 docker-compose up -d
 
-# Starten des Dienstes mit Tests
+# Start the service with tests
 docker-compose up test
 
-# Kontinuierliche Testausführung (Testwatch)
+# Continuous test execution (test watch)
 docker-compose up test-watch
 ```
 
