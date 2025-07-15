@@ -17,35 +17,35 @@ Gunter is a simple Flask-based web service that provides geolocation and WHOIS i
 
 ## Installation
 
-### Option 1: Container (empfohlen)
+### Option 1: Container (recommended)
 
 1. **Docker:**
    ```bash
-   # Container herunterladen
+   # Download container
    docker pull ghcr.io/needful-apps/gunter:latest
    
-   # Container starten
+   # Start container
    docker run -d -p 6600:6600 --name gunter ghcr.io/needful-apps/gunter:latest
    
-   # Container mit persistenten Daten starten
+   # Start container with persistent data
    docker run -d -p 6600:6600 -v gunter_data:/app --name gunter ghcr.io/needful-apps/gunter:latest
    ```
 
 2. **Podman:**
    ```bash
-   # Container herunterladen
+   # Download container
    podman pull ghcr.io/needful-apps/gunter:latest
    
-   # Container starten
+   # Start container
    podman run -d -p 6600:6600 --name gunter ghcr.io/needful-apps/gunter:latest
    
-   # Container mit persistenten Daten starten
+   # Start container with persistent data
    podman run -d -p 6600:6600 -v gunter_data:/app:Z --name gunter ghcr.io/needful-apps/gunter:latest
    ```
 
 The server will then be available at `http://localhost:6600`.
 
-### Option 2: Lokale Installation
+### Option 2: Local Installation
 
 1.  **Clone the repository:**
     ```bash
@@ -136,4 +136,4 @@ This project is licensed under the MIT License - see the `LICENSE` file for deta
 
 ---
 
-Developed with ❤️ by [Needful Apps](https://needful-apps.de)
+Developed with ❤️ by [needful-apps](https://needful-apps.de)
