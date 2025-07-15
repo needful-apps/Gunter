@@ -130,6 +130,10 @@ Contributions are welcome! Please see `CONTRIBUTING.md` for details on how to ge
 
 This project is licensed under the MIT License - see the `LICENSE` file for details.
 
+## Acknowledgements
+
+"This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com."
+
 ---
 
 Developed with ❤️ by [Needful Apps](https://needful-apps.de)
