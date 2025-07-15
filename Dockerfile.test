@@ -1,0 +1,14 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Make sure that the test output directories exist
+RUN mkdir -p /app/test_results/htmlcov
+
+# Default command - will be overridden by docker-compose
+CMD ["pytest", "tests/", "-v"]

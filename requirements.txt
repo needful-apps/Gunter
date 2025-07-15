@@ -1,0 +1,9 @@
+# Dependencies compatible with Python 3.13
+requests>=2.32.0
+maxminddb>=2.5.0
+Flask>=3.0.0
+APScheduler>=3.10.4
+rich>=13.7.0
+python-whois>=0.8.0
+ipwhois>=1.2.0
+waitress>=2.2.0

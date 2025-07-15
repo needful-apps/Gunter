@@ -1,0 +1,188 @@
+name: Gunter Service CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  APP_NAME: gunter
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  lint:
+    name: 🧹 Code Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy types-requests==2.32.0.20250602 types-waitress==3.0.1.20241117
+          pip install -r requirements.txt
+
+      - name: Run Linting
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          black --check -t py312 .
+          isort --check-only --profile black .
+          pip install types-requests==2.32.0.20250602 types-waitress
+          mypy --ignore-missing-imports .
+
+  test:
+    name: 🧪 Tests & Coverage
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install pytest pytest-cov
+
+      - name: Run Tests
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml:coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  security-scan:
+    name: 🔒 Security Scanning
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner on code
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Build Docker image for scanning
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.APP_NAME }}:test
+          
+      - name: Run Trivy vulnerability scanner on Docker image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.APP_NAME }}:test
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  build:
+    name: 🏗️ Build & Push
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set Up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+            registry: ghcr.io
+            username: ${{ github.repository_owner }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+            
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ env.APP_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+            context: .
+            file: ./Dockerfile 
+            push: ${{ github.event_name != 'pull_request' }}
+            platforms: linux/amd64,linux/arm64
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+            build-args: |
+              BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+              VCS_REF=${{ github.sha }}
+              VERSION=${{ github.ref_name }}
+
+  notify:
+    name: 📢 Notification
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    steps:
+      - name: Generate build status summary
+        if: always()
+        run: |
+          echo "## 🚀 Gunter CI/CD Pipeline Status" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build.result }}" = "success" ]; then
+            echo "✅ **Build successful!** The application has been built and uploaded to the registry successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build failed!** Please check the pipeline logs for more details." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  gunter:
+    build: .
+    container_name: gunter
+    ports:
+      - "6600:6600"
+    volumes:
+      - .:/app
+      # Named volume for the database to persist across container restarts
+      - geolite_db:/app/geolite_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6600/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: gunter_test
+    volumes:
+      - .:/app
+      - ./test_results:/app/test_results
+    environment:
+      - PYTEST_ADDOPTS=--color=yes
+      - PYTHONPATH=/app
+    command: >
+      bash -c "pytest tests/ -v --junitxml=/app/test_results/junit.xml 
+      --cov=. --cov-report=xml:/app/test_results/coverage.xml 
+      --cov-report=html:/app/test_results/htmlcov"
+
+  test-watch:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: gunter_test_watch
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app
+    command: ["pytest-watch", "--runner", "pytest tests/ -v"]
+
+volumes:
+  geolite_db:
+  test_results:

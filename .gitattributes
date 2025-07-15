@@ -1,0 +1,38 @@
+# Automatische Zeilenendenerkennung für alle Dateien
+* text=auto
+
+# Explizit Textdateien deklarieren und die Normalisierung erzwingen
+*.py text
+*.md text
+*.txt text
+*.yml text
+*.yaml text
+*.json text
+*.html text
+*.css text
+*.js text
+*.ini text
+*.cfg text
+
+# Deklariere Binärdateien, die nie modifiziert werden sollten
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mmdb binary
+
+# Für Git LFS, falls verwendet
+# *.mmdb filter=lfs diff=lfs merge=lfs -text
+
+# Skripte sollten immer mit LF enden
+*.sh text eol=lf
+
+# Windows-spezifische Dateien sollten immer mit CRLF enden
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Explizite Zeilenenden für bestimmte Dateien erzwingen
+.gitattributes text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
