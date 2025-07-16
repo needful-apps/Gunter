@@ -390,7 +390,9 @@ class GeoLookup(Resource):
         """
         if not db_manager.mmdb_reader:
             # Handle database not available case
-            return geo_ns.abort(503, error="GeoLite2 database not available. Please try again later.")
+            return geo_ns.abort(
+                503, error="GeoLite2 database not available. Please try again later."
+            )
 
         # Check for invalid IP format first
         try:
@@ -398,13 +400,13 @@ class GeoLookup(Resource):
         except ValueError:
             # Invalid IP format
             return geo_ns.abort(400, error="Invalid IP address format.")
-            
+
         # Check if record exists
         record = db_manager.mmdb_reader.get(ip)
         if not record:
             log.info(f"IP address not found in database: {ip}")
             return geo_ns.abort(404, error="IP address not found in the database.")
-            
+
         try:
 
             lang = request.args.get("lang", "de").lower()
