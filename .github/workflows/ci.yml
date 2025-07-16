@@ -102,6 +102,7 @@ jobs:
           context: .
           push: false
           load: true
+          no-cache: true
           tags: ${{ env.APP_NAME }}:test
           
       - name: Run Trivy vulnerability scanner on Docker image
@@ -165,13 +166,11 @@ jobs:
             platforms: linux/amd64,linux/arm64
             tags: ${{ steps.meta.outputs.tags }}
             labels: ${{ steps.meta.outputs.labels }}
-            cache-from: type=gha
-            cache-to: type=gha,mode=max
+            no-cache: true
             build-args: |
               BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
               VCS_REF=${{ github.sha }}
               VERSION=${{ github.ref_name }}
-              CACHEBUST=${{ github.sha }}
 
   notify:
     name: 📢 Notification

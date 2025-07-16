@@ -1,7 +1,5 @@
 FROM python:3.13-slim
 
-ARG CACHEBUST=1
-
 WORKDIR /app
 
 COPY requirements.txt .
