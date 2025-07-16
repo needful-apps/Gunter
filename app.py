@@ -408,7 +408,6 @@ class GeoLookup(Resource):
             return geo_ns.abort(404, error="IP address not found in the database.")
 
         try:
-
             lang = request.args.get("lang", "de").lower()
             record_dict: Dict[str, Any] = {}
             if record and isinstance(record, dict):
