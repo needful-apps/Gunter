@@ -11,7 +11,7 @@ import requests
 import whois
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, jsonify, request
-from flask_restx import Api, Resource, fields, Namespace
+from flask_restx import Api, Namespace, Resource, fields
 from ipwhois import IPWhois
 from rich.logging import RichHandler
 from rich.progress import Progress
@@ -57,9 +57,9 @@ api = Api(
     version="1.0",
     title="Gunter API",
     description="API for Geolocation, WHOIS queries, and Reverse DNS",
-    doc="/api/docs"
-    if config.ENABLE_API_DOCS
-    else False,  # Disable Swagger UI if not enabled
+    doc=(
+        "/api/docs" if config.ENABLE_API_DOCS else False
+    ),  # Disable Swagger UI if not enabled
     prefix="/api",
 )
 
