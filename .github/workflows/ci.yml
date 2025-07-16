@@ -171,6 +171,7 @@ jobs:
               BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
               VCS_REF=${{ github.sha }}
               VERSION=${{ github.ref_name }}
+              CACHEBUST=${{ github.sha }}
 
   notify:
     name: 📢 Notification
