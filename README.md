@@ -14,6 +14,7 @@ Gunter is a simple Flask-based web service that provides geolocation and WHOIS i
 -   **Reverse DNS**: Resolve IP addresses to hostnames.
 -   **Automatic Database Updates**: The service regularly checks for and downloads the latest GeoLite2 database from a public repository.
 -   **Simple API**: Easy-to-use JSON API endpoints.
+-   **OpenAPI Documentation**: Interactive API documentation with Swagger UI for easy exploration and testing.
 
 ## Installation
 
@@ -89,7 +90,9 @@ The server will then be available at `http://localhost:6600`.
 
 -   `GET /api/whois/<target>`: Retrieves WHOIS data for an IP address.
 
--   `GET /api/status`: Shows the current status of the GeoLite2 database.
+-   `GET /api/status`: Shows the current status of the GeoLite2 database. (Can be disabled via configuration)
+
+-   `GET /api/docs`: OpenAPI/Swagger documentation interface for exploring and testing the API. (Can be disabled via configuration)
 
 ## Example Usage
 
@@ -107,6 +110,8 @@ curl http://localhost:6600/api/geo-lookup/example.com
 curl http://localhost:6600/api/status
 ```
 
+You can also explore and test the API using the built-in Swagger UI by accessing `http://localhost:6600/api/docs` in your browser (if the API docs are enabled).
+
 ### Docker-Compose
 
 Alternatively, the service can be started with Docker Compose:
@@ -122,6 +127,70 @@ docker-compose up test
 docker-compose up test-watch
 ```
 
+## Configuration Options
+
+The service can be configured using the following environment variables:
+
+- `GUNTER_ENABLE_STATUS`: Controls whether the `/api/status` endpoint is enabled. Set to `false` to disable. Default: `true`.
+- `GUNTER_ENABLE_API_DOCS`: Controls whether the OpenAPI documentation at `/api/docs` is enabled. Set to `false` to disable. Default: `true`.
+
+Example of disabling status endpoint and API docs in production:
+
+```bash
+# Docker
+docker run -d -p 6600:6600 -e GUNTER_ENABLE_STATUS=false -e GUNTER_ENABLE_API_DOCS=false --name gunter ghcr.io/needful-apps/gunter:latest
+
+# Podman
+podman run -d -p 6600:6600 -e GUNTER_ENABLE_STATUS=false -e GUNTER_ENABLE_API_DOCS=false --name gunter ghcr.io/needful-apps/gunter:latest
+```
+
+### Docker-Compose
+
+You can also configure these options in your docker-compose.yml file:
+
+```yaml
+# Development configuration with enabled status and API docs
+services:
+  gunter-dev:
+    image: ghcr.io/needful-apps/gunter:latest
+    container_name: gunter-dev
+    ports:
+      - "6600:6600"
+    environment:
+      - GUNTER_ENABLE_STATUS=true
+      - GUNTER_ENABLE_API_DOCS=true
+    volumes:
+      - gunter_data:/app
+    restart: unless-stopped
+
+  # Production configuration with disabled status and API docs
+  gunter-prod:
+    image: ghcr.io/needful-apps/gunter:latest
+    container_name: gunter-prod
+    ports:
+      - "6601:6600"
+    environment:
+      - GUNTER_ENABLE_STATUS=false
+      - GUNTER_ENABLE_API_DOCS=false
+    volumes:
+      - gunter_data_prod:/app
+    restart: unless-stopped
+
+volumes:
+  gunter_data:
+  gunter_data_prod:
+```
+
+Start the development or production configuration using:
+
+```bash
+# Start development configuration
+docker-compose up -d gunter-dev
+
+# Start production configuration
+docker-compose up -d gunter-prod
+```
+
 ## Contributing
 
 Contributions are welcome! Please see `CONTRIBUTING.md` for details on how to get started.
@@ -132,7 +201,7 @@ This project is licensed under the MIT License - see the `LICENSE` file for deta
 
 ## Acknowledgements
 
-"This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com."
+This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com.
 
 ---
 
