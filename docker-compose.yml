@@ -6,13 +6,38 @@ services:
     container_name: gunter
     ports:
       - "6600:6600"
+    environment:
+      # Enable status endpoint and API docs for development
+      - GUNTER_ENABLE_STATUS=true
+      - GUNTER_ENABLE_API_DOCS=true
     volumes:
       - .:/app
       # Named volume for the database to persist across container restarts
       - geolite_db:/app/geolite_db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6600/api/status"]
+      test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      
+  # Example of a production service configuration with disabled status and docs
+  gunter-prod:
+    build: .
+    container_name: gunter-prod
+    ports:
+      - "6600:6600"
+    environment:
+      # Disable status endpoint and API docs for production
+      - GUNTER_ENABLE_STATUS=false
+      - GUNTER_ENABLE_API_DOCS=false
+    volumes:
+      # Only use volume for database persistence
+      - geolite_db:/app/geolite_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
       interval: 30s
       timeout: 10s
       retries: 3

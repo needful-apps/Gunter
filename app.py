@@ -11,6 +11,7 @@ import requests
 import whois
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, jsonify, request
+from flask_restx import Api, Namespace, Resource, fields
 from ipwhois import IPWhois
 from rich.logging import RichHandler
 from rich.progress import Progress
@@ -29,6 +30,12 @@ class Config:
     FLASK_PORT = 6600
     SCHEDULER_UPDATE_DAYS = 1
 
+    # Feature flags - can be controlled via environment variables
+    ENABLE_STATUS_ENDPOINT = (
+        os.environ.get("GUNTER_ENABLE_STATUS", "true").lower() == "true"
+    )
+    ENABLE_API_DOCS = os.environ.get("GUNTER_ENABLE_API_DOCS", "true").lower() == "true"
+
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -40,6 +47,34 @@ logging.basicConfig(
 log = logging.getLogger("rich")
 
 app = Flask(__name__)
+
+# --- Initialize config first ---
+config = Config()
+
+# --- OpenAPI/Swagger Setup ---
+api = Api(
+    app,
+    version="1.0",
+    title="Gunter API",
+    description="API for Geolocation, WHOIS queries, and Reverse DNS",
+    doc=(
+        "/api/docs" if config.ENABLE_API_DOCS else False
+    ),  # Disable Swagger UI if not enabled
+    prefix="/api",
+)
+
+# Define namespaces for different endpoints
+geo_ns = Namespace("geo-lookup", description="Geolocation endpoint")
+whois_ns = Namespace("whois", description="WHOIS query endpoint")
+
+# Always add the core functional namespaces
+api.add_namespace(geo_ns)
+api.add_namespace(whois_ns)
+
+# Conditionally create and add the status namespace if enabled
+if config.ENABLE_STATUS_ENDPOINT:
+    status_ns = Namespace("status", description="Status endpoint")
+    api.add_namespace(status_ns)
 
 # --- Service classes for encapsulated logic ---
 
@@ -244,9 +279,6 @@ class WhoisService:
             return None
 
 
-# --- Helper Functions ---
-
-
 def filter_names_by_lang(
     data: Union[Dict[str, Any], List[Any]], lang_code: str, fallback_lang: str = "en"
 ) -> Union[Dict[str, Any], List[Any], Any]:
@@ -280,82 +312,162 @@ def filter_names_by_lang(
     return data
 
 
+database_status_model = api.model(
+    "DatabaseStatus",
+    {
+        "database_loaded": fields.Boolean(
+            description="Indicates if the database is loaded"
+        ),
+        "last_database_update_check_utc": fields.String(
+            description="Timestamp of the last database update check"
+        ),
+        "current_database_version_tag": fields.String(
+            description="Current database version"
+        ),
+        "current_database_file": fields.String(
+            description="Currently used database file"
+        ),
+    },
+)
+
+whois_data_model = api.model(
+    "WhoisData",
+    {
+        "target": fields.String(description="Target of the WHOIS query (IP or domain)"),
+        "lookup_timestamp": fields.String(description="Query timestamp"),
+        "ip_whois": fields.Raw(description="WHOIS data for IP addresses"),
+        "domain_whois": fields.Raw(description="WHOIS data for domains"),
+        "reverse_dns": fields.String(description="Reverse DNS result (if available)"),
+    },
+)
+
+geo_lookup_model = api.model(
+    "GeoLookup",
+    {
+        "city": fields.Raw(description="City information"),
+        "country": fields.Raw(description="Country information"),
+        "continent": fields.Raw(description="Continent information"),
+        "location": fields.Raw(description="Location information (coordinates)"),
+        "postal": fields.Raw(description="Postal code information"),
+        "subdivisions": fields.Raw(
+            description="Subdivisions information (states, provinces)"
+        ),
+        "registered_country": fields.Raw(description="Registered country information"),
+        "database_info": fields.Raw(description="Database status information"),
+        "whois_data": fields.Nested(
+            whois_data_model, description="WHOIS data (optional)"
+        ),
+    },
+)
+
 # --- Service Initialization ---
-config = Config()
 db_manager = GeoDBManager(config)
 whois_service = WhoisService()
 
-# --- Flask API Endpoints ---
 
+@geo_ns.route("/<string:ip>")
+@geo_ns.doc(
+    params={"ip": "IP address for geolocation"},
+    responses={
+        200: "Success",
+        400: "Invalid IP address",
+        404: "IP address not found",
+        503: "GeoLite2 database not available",
+    },
+)
+class GeoLookup(Resource):
+    @geo_ns.doc(
+        params={
+            "lang": "Language code for the response (e.g., de, en, fr)",
+            "exclude_whois": "If true, WHOIS data will be excluded from the response",
+        }
+    )
+    @geo_ns.marshal_with(geo_lookup_model, skip_none=True, code=200)
+    def get(self, ip):
+        """
+        Performs a GeoLite2 IP lookup.
+        Returns detailed geo information and optional WHOIS data.
+        """
+        if not db_manager.mmdb_reader:
+            # Handle database not available case
+            return geo_ns.abort(
+                503, error="GeoLite2 database not available. Please try again later."
+            )
 
-@app.route("/api/geo-lookup/<ip>", methods=["GET"])
-def geo_lookup(ip: str):
-    """
-    API endpoint for a GeoLite2 IP lookup.
-    Accepts 'lang' and 'exclude_whois' as query parameters.
-    """
-    if not db_manager.mmdb_reader:
-        return (
-            jsonify(
-                {"error": "GeoLite2 database not available. Please try again later."}
-            ),
-            503,
-        )
+        # Check for invalid IP format first
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            # Invalid IP format
+            return geo_ns.abort(400, error="Invalid IP address format.")
 
-    try:
+        # Check if record exists
         record = db_manager.mmdb_reader.get(ip)
         if not record:
-            return jsonify({"error": "IP address not found in the database."}), 404
+            log.info(f"IP address not found in database: {ip}")
+            return geo_ns.abort(404, error="IP address not found in the database.")
 
-        lang = request.args.get("lang", "de").lower()
-        # Ensure we're working with a dictionary that can be modified
-        record_dict: Dict[str, Any] = {}
-        if record and isinstance(record, dict):
-            for key, value in record.items():
-                record_dict[key] = value
-        processed_record = filter_names_by_lang(record_dict, lang)
-        processed_record = cast(Dict[str, Any], processed_record)
+        try:
+            lang = request.args.get("lang", "de").lower()
+            record_dict: Dict[str, Any] = {}
+            if record and isinstance(record, dict):
+                for key, value in record.items():
+                    record_dict[key] = value
+            processed_record = filter_names_by_lang(record_dict, lang)
+            processed_record = cast(Dict[str, Any], processed_record)
 
-        processed_record["database_info"] = {
-            "last_updated_utc": (
-                db_manager.last_db_update_time.isoformat()
-                if db_manager.last_db_update_time
-                else "N/A"
-            ),
-            "version_tag": db_manager.current_db_version_tag,
-        }
+            processed_record["database_info"] = {
+                "last_updated_utc": (
+                    db_manager.last_db_update_time.isoformat()
+                    if db_manager.last_db_update_time
+                    else "N/A"
+                ),
+                "version_tag": db_manager.current_db_version_tag,
+            }
 
-        if request.args.get("exclude_whois", "false").lower() != "true":
-            log.info(f"Including WHOIS data for IP: {ip}")
-            processed_record["whois_data"] = whois_service.get_whois_data(ip)
+            if request.args.get("exclude_whois", "false").lower() != "true":
+                log.info(f"Including WHOIS data for IP: {ip}")
+                processed_record["whois_data"] = whois_service.get_whois_data(ip)
 
-        log.info(f"Lookup for IP: {ip}, Lang: {lang} successful.")
-        return jsonify(processed_record)
-    except ValueError:
-        return jsonify({"error": "Invalid IP address format."}), 400
-    except Exception as e:
-        log.error(f"Error during IP lookup for {ip}: {e}")
-        return jsonify({"error": "An internal server error occurred."}), 500
-
-
-@app.route("/api/status", methods=["GET"])
-def get_status():
-    """API endpoint to get the current status of the GeoLite2 database."""
-    return jsonify(db_manager.get_status())
+            log.info(f"Lookup for IP: {ip}, Lang: {lang} successful.")
+            return processed_record
+        except Exception as e:
+            log.error(f"Error during IP lookup for {ip}: {e}")
+            response = jsonify({"error": "An internal server error occurred."})
+            response.status_code = 500
+            return response
 
 
-@app.route("/api/whois/<target>", methods=["GET"])
-def whois_lookup(target: str):
-    """API endpoint for a WHOIS lookup for an IP or domain."""
-    try:
-        whois_data = whois_service.get_whois_data(target)
-        return jsonify(whois_data)
-    except Exception as e:
-        log.error(f"Error during WHOIS lookup for {target}: {e}")
-        return jsonify({"error": "An internal server error occurred."}), 500
+if config.ENABLE_STATUS_ENDPOINT:
+
+    @status_ns.route("")
+    class Status(Resource):
+        @status_ns.marshal_with(database_status_model)
+        def get(self):
+            """API endpoint to retrieve the current status of the GeoLite2 database."""
+            return db_manager.get_status()
 
 
-# --- Scheduler Setup ---
+@whois_ns.route("/<string:target>")
+@whois_ns.doc(
+    params={"target": "IP address or domain name for the WHOIS query"},
+    responses={200: "Success", 500: "Internal server error"},
+)
+class WhoisLookup(Resource):
+    @whois_ns.marshal_with(whois_data_model, skip_none=True)
+    def get(self, target):
+        """
+        API endpoint for a WHOIS lookup for an IP or domain.
+        Provides detailed WHOIS information and, if an IP address is specified, reverse DNS data.
+        """
+        try:
+            whois_data = whois_service.get_whois_data(target)
+            return whois_data
+        except Exception as e:
+            log.error(f"Error during WHOIS lookup for {target}: {e}")
+            whois_ns.abort(500, error="An internal server error occurred.")
+
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(
     func=db_manager.check_for_new_release_and_update,
@@ -364,7 +476,6 @@ scheduler.add_job(
     id="daily_db_update",
 )
 
-# --- Application Start ---
 if __name__ == "__main__":
     log.info("Performing initial database download on startup...")
     db_manager.download_and_load_database()
@@ -375,8 +486,6 @@ if __name__ == "__main__":
         f"Scheduler started. Checking every {config.SCHEDULER_UPDATE_DAYS} day(s)."
     )
 
-    # Waitress is a production-ready WSGI server used directly here.
-    # It's a simple alternative to Gunicorn without needing an external process.
     log.info(
         f"Starting Flask app with Waitress on http://{config.FLASK_HOST}:{config.FLASK_PORT}"
     )
