@@ -279,9 +279,6 @@ class WhoisService:
             return None
 
 
-# --- Helper Functions ---
-
-
 def filter_names_by_lang(
     data: Union[Dict[str, Any], List[Any]], lang_code: str, fallback_lang: str = "en"
 ) -> Union[Dict[str, Any], List[Any], Any]:
@@ -385,21 +382,30 @@ class GeoLookup(Resource):
             "exclude_whois": "If true, WHOIS data will be excluded from the response",
         }
     )
-    @geo_ns.marshal_with(geo_lookup_model, skip_none=True)
+    @geo_ns.marshal_with(geo_lookup_model, skip_none=True, code=200)
     def get(self, ip):
         """
         Performs a GeoLite2 IP lookup.
         Returns detailed geo information and optional WHOIS data.
         """
         if not db_manager.mmdb_reader:
-            geo_ns.abort(
-                503, error="GeoLite2 database not available. Please try again later."
-            )
+            # Handle database not available case
+            return geo_ns.abort(503, error="GeoLite2 database not available. Please try again later.")
 
+        # Check for invalid IP format first
         try:
-            record = db_manager.mmdb_reader.get(ip)
-            if not record:
-                geo_ns.abort(404, error="IP address not found in the database.")
+            ipaddress.ip_address(ip)
+        except ValueError:
+            # Invalid IP format
+            return geo_ns.abort(400, error="Invalid IP address format.")
+            
+        # Check if record exists
+        record = db_manager.mmdb_reader.get(ip)
+        if not record:
+            log.info(f"IP address not found in database: {ip}")
+            return geo_ns.abort(404, error="IP address not found in the database.")
+            
+        try:
 
             lang = request.args.get("lang", "de").lower()
             record_dict: Dict[str, Any] = {}
@@ -424,11 +430,11 @@ class GeoLookup(Resource):
 
             log.info(f"Lookup for IP: {ip}, Lang: {lang} successful.")
             return processed_record
-        except ValueError:
-            geo_ns.abort(400, error="Invalid IP address format.")
         except Exception as e:
             log.error(f"Error during IP lookup for {ip}: {e}")
-            geo_ns.abort(500, error="An internal server error occurred.")
+            response = jsonify({"error": "An internal server error occurred."})
+            response.status_code = 500
+            return response
 
 
 if config.ENABLE_STATUS_ENDPOINT:
