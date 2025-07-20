@@ -131,17 +131,20 @@ docker-compose up test-watch
 
 The service can be configured using the following environment variables:
 
+
 - `GUNTER_ENABLE_STATUS`: Controls whether the `/api/status` endpoint is enabled. Set to `false` to disable. Default: `true`.
 - `GUNTER_ENABLE_API_DOCS`: Controls whether the OpenAPI documentation at `/api/docs` is enabled. Set to `false` to disable. Default: `true`.
+- `GUNTER_LANG`: Sets the default language for all API responses (e.g. `en`, `de`, `fr`). If not set, defaults to `de`. This can be overridden per request using the `?lang=` query parameter.
 
-Example of disabling status endpoint and API docs in production:
+Example of setting environment variables:
 
 ```bash
-# Docker
-docker run -d -p 6600:6600 -e GUNTER_ENABLE_STATUS=false -e GUNTER_ENABLE_API_DOCS=false --name gunter ghcr.io/needful-apps/gunter:latest
 
-# Podman
-podman run -d -p 6600:6600 -e GUNTER_ENABLE_STATUS=false -e GUNTER_ENABLE_API_DOCS=false --name gunter ghcr.io/needful-apps/gunter:latest
+# Docker (set default language to English)
+docker run -d -p 6600:6600 -e GUNTER_ENABLE_STATUS=false -e GUNTER_ENABLE_API_DOCS=false -e GUNTER_LANG=en --name gunter ghcr.io/needful-apps/gunter:latest
+
+# Podman (set default language to French)
+podman run -d -p 6600:6600 -e GUNTER_ENABLE_STATUS=false -e GUNTER_ENABLE_API_DOCS=false -e GUNTER_LANG=fr --name gunter ghcr.io/needful-apps/gunter:latest
 ```
 
 ### Docker-Compose

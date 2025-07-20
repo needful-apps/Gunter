@@ -20,6 +20,7 @@ from waitress import serve
 
 # --- Configuration ---
 class Config:
+    DEFAULT_LANG = os.environ.get("GUNTER_LANG", "de")
     DB_FILE_PREFIX = "GeoLite2-City"
     DB_FILE_SUFFIX = ".mmdb"
     DB_DOWNLOAD_URL = "https://git.io/GeoLite2-City.mmdb"
@@ -411,7 +412,8 @@ class GeoLookup(Resource):
             return geo_ns.abort(404, error="IP address not found in the database.")
 
         try:
-            lang = request.args.get("lang", "de").lower()
+            # Use lang from query param, fallback to config default
+            lang = request.args.get("lang", config.DEFAULT_LANG).lower()
             record_dict: Dict[str, Any] = {}
             if record and isinstance(record, dict):
                 for key, value in record.items():
