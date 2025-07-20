@@ -11,9 +11,9 @@ services:
       - GUNTER_ENABLE_STATUS=true
       - GUNTER_ENABLE_API_DOCS=true
     volumes:
-      - .:/app
-      # Named volume for the database to persist across container restarts
-      - geolite_db:/app/geolite_db
+  - .:/app
+  # Named volume for the database to persist across container restarts
+  - geolite_db:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
@@ -33,8 +33,8 @@ services:
       - GUNTER_ENABLE_STATUS=false
       - GUNTER_ENABLE_API_DOCS=false
     volumes:
-      # Only use volume for database persistence
-      - geolite_db:/app/geolite_db
+  # Only use volume for database persistence
+  - geolite_db:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]

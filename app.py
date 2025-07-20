@@ -20,12 +20,19 @@ from waitress import serve
 
 # --- Configuration ---
 class Config:
+    # Allow user to specify a custom MMDB file (e.g. from db-ip.com)
+    CUSTOM_DB_FILE = os.environ.get("GUNTER_DB_FILE")
+    EXTERNAL_DB_URL = os.environ.get(
+        "GUNTER_DB_URL"
+    )  # New: external MMDB source (http(s), ftp(s))
+    DEFAULT_LANG = os.environ.get("GUNTER_LANG", "de")
     DB_FILE_PREFIX = "GeoLite2-City"
     DB_FILE_SUFFIX = ".mmdb"
     DB_DOWNLOAD_URL = "https://git.io/GeoLite2-City.mmdb"
     GITHUB_RELEASE_API_URL = (
         "https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases/latest"
     )
+    DB_DIR = os.environ.get("GUNTER_DB_DIR", "/data")
     FLASK_HOST = "0.0.0.0"
     FLASK_PORT = 6600
     SCHEDULER_UPDATE_DAYS = 1
@@ -116,21 +123,95 @@ class GeoDBManager:
                 log.error(f"Error removing corrupt file {filepath}: {e}")
 
     def download_and_load_database(self):
-        """Downloads the GeoLite2 database, loads it, and cleans up old versions."""
+        """Downloads and loads the MMDB database from an external URL, local file, or GeoLite2. Cleans up old versions."""
+        import shutil
+        from urllib.parse import urlparse
+
+        os.makedirs(self.config.DB_DIR, exist_ok=True)
+
+        # 1. External DB URL (http(s), ftp(s))
+        if self.config.EXTERNAL_DB_URL:
+            url = self.config.EXTERNAL_DB_URL
+            parsed = urlparse(url)
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            ext = os.path.splitext(parsed.path)[-1] or ".mmdb"
+            new_db_filename = f"external-{timestamp}{ext}"
+            new_db_filepath = os.path.join(self.config.DB_DIR, new_db_filename)
+            log.info(f"Downloading MMDB from external source: {url}")
+            try:
+                if parsed.scheme.startswith("ftp"):
+                    import ftplib
+                    from contextlib import closing
+
+                    # Basic FTP/FTPS support (anonymous or user:pass in URL)
+                    ftp_host = parsed.hostname
+                    ftp_port = parsed.port or (990 if parsed.scheme == "ftps" else 21)
+                    ftp_user = parsed.username or "anonymous"
+                    ftp_pass = parsed.password or ""
+                    ftp_path = parsed.path
+                    with closing(
+                        ftplib.FTP_TLS() if parsed.scheme == "ftps" else ftplib.FTP()
+                    ) as ftp:
+                        ftp.connect(ftp_host, ftp_port, timeout=30)
+                        ftp.login(ftp_user, ftp_pass)
+                        with open(new_db_filepath, "wb") as f:
+                            ftp.retrbinary(f"RETR {ftp_path}", f.write)
+                else:
+                    # HTTP(S) download
+                    response = requests.get(url, stream=True, timeout=60)
+                    response.raise_for_status()
+                    total_size = int(response.headers.get("content-length", 0))
+                    with Progress() as progress:
+                        task = progress.add_task(
+                            f"[cyan]Downloading MMDB from {url}...", total=total_size
+                        )
+                        with open(new_db_filepath, "wb") as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                                progress.update(task, advance=len(chunk))
+                log.info(f"Successfully downloaded external MMDB: {new_db_filepath}")
+                if self.mmdb_reader:
+                    self.mmdb_reader.close()
+                self.mmdb_reader = maxminddb.open_database(new_db_filepath)
+                self.last_db_update_time = datetime.now()
+                self._cleanup_old_db_files(new_db_filepath)
+                self.current_db_file_path = new_db_filepath
+                log.info(f"External MMDB successfully loaded from {new_db_filepath}.")
+            except Exception as e:
+                log.error(f"Failed to download/load external MMDB: {e}")
+                self.mmdb_reader = None
+                self._cleanup_failed_download(new_db_filepath)
+            return
+
+        # 2. Local custom DB file
+        if self.config.CUSTOM_DB_FILE:
+            db_path = self.config.CUSTOM_DB_FILE
+            log.info(f"Loading custom MMDB database: {db_path}")
+            try:
+                if self.mmdb_reader:
+                    self.mmdb_reader.close()
+                self.mmdb_reader = maxminddb.open_database(db_path)
+                self.last_db_update_time = datetime.now()
+                self.current_db_file_path = db_path
+                log.info(f"Custom MMDB database successfully loaded from {db_path}.")
+            except Exception as e:
+                log.error(f"Failed to load custom MMDB database: {e}")
+                self.mmdb_reader = None
+            return
+
+        # 3. Default: Download GeoLite2
         log.info("Attempting to download and load GeoLite2-City.mmdb...")
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         new_db_filename = (
             f"{self.config.DB_FILE_PREFIX}-{timestamp}{self.config.DB_FILE_SUFFIX}"
         )
-        new_db_filepath = os.path.join(os.getcwd(), new_db_filename)
-
+        new_db_filepath = os.path.join(self.config.DB_DIR, new_db_filename)
         try:
             response = requests.get(
                 self.config.DB_DOWNLOAD_URL, stream=True, timeout=60
             )
             response.raise_for_status()
             total_size = int(response.headers.get("content-length", 0))
-
             with Progress() as progress:
                 task = progress.add_task(
                     "[cyan]Downloading GeoLite2-City.mmdb...", total=total_size
@@ -140,17 +221,13 @@ class GeoDBManager:
                         f.write(chunk)
                         progress.update(task, advance=len(chunk))
             log.info(f"Successfully downloaded: {new_db_filepath}")
-
             if self.mmdb_reader:
                 self.mmdb_reader.close()
-
             self.mmdb_reader = maxminddb.open_database(new_db_filepath)
             self.last_db_update_time = datetime.now()
             log.info(f"GeoLite2-City.mmdb successfully loaded from {new_db_filepath}.")
-
             self._cleanup_old_db_files(new_db_filepath)
             self.current_db_file_path = new_db_filepath
-
         except (
             requests.exceptions.RequestException,
             maxminddb.InvalidDatabaseError,
@@ -164,7 +241,17 @@ class GeoDBManager:
             self._cleanup_failed_download(new_db_filepath)
 
     def check_for_new_release_and_update(self):
-        """Checks GitHub for a new version and updates if necessary."""
+        """Checks for a new version and updates if necessary. Skips if EXTERNAL_DB_URL or CUSTOM_DB_FILE is set."""
+        if self.config.EXTERNAL_DB_URL:
+            log.info(
+                "External DB URL set (GUNTER_DB_URL). Skipping update check for GeoLite2-City.mmdb."
+            )
+            return
+        if self.config.CUSTOM_DB_FILE:
+            log.info(
+                "Custom MMDB set (GUNTER_DB_FILE). Skipping update check for GeoLite2-City.mmdb."
+            )
+            return
         log.info("Checking for new GeoLite2-City.mmdb releases on GitHub...")
         try:
             response = requests.get(self.config.GITHUB_RELEASE_API_URL, timeout=10)
@@ -201,6 +288,7 @@ class GeoDBManager:
             ),
             "current_database_version_tag": self.current_db_version_tag,
             "current_database_file": self.current_db_file_path or "N/A",
+            "database_directory": self.config.DB_DIR,
         }
 
 
@@ -408,7 +496,8 @@ class GeoLookup(Resource):
             return geo_ns.abort(404, error="IP address not found in the database.")
 
         try:
-            lang = request.args.get("lang", "de").lower()
+            # Use lang from query param, fallback to config default
+            lang = request.args.get("lang", config.DEFAULT_LANG).lower()
             record_dict: Dict[str, Any] = {}
             if record and isinstance(record, dict):
                 for key, value in record.items():

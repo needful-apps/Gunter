@@ -111,7 +111,7 @@ class TestAPIEndpoints:
             "database_loaded": True,
             "last_database_update_check_utc": "2023-01-01T00:00:00",
             "current_database_version_tag": "v1.0.0",
-            "current_database_file": "/path/to/db.mmdb",
+            "current_database_file": "/data/db.mmdb",
         }
 
         # Make the request
@@ -123,7 +123,7 @@ class TestAPIEndpoints:
         assert data["database_loaded"] is True
         assert data["last_database_update_check_utc"] == "2023-01-01T00:00:00"
         assert data["current_database_version_tag"] == "v1.0.0"
-        assert data["current_database_file"] == "/path/to/db.mmdb"
+        assert data["current_database_file"] == "/data/db.mmdb"
         mock_get_status.assert_called_once()
 
     @mock.patch.object(whois_service, "get_whois_data")
