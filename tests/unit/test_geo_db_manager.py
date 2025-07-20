@@ -55,6 +55,7 @@ class TestGeoDBManager:
         manager.last_db_update_time = datetime(2023, 1, 1)
         manager.current_db_version_tag = "v1.0.0"
         manager.current_db_file_path = "/path/to/db.mmdb"
+        assert status["database_directory"] == manager.config.DB_DIR
 
         status = manager.get_status()
         assert status["database_loaded"]

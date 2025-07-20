@@ -26,6 +26,7 @@ class Config:
     GITHUB_RELEASE_API_URL = (
         "https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases/latest"
     )
+    DB_DIR = os.environ.get("GUNTER_DB_DIR", "/data")
     FLASK_HOST = "0.0.0.0"
     FLASK_PORT = 6600
     SCHEDULER_UPDATE_DAYS = 1
@@ -118,11 +119,12 @@ class GeoDBManager:
     def download_and_load_database(self):
         """Downloads the GeoLite2 database, loads it, and cleans up old versions."""
         log.info("Attempting to download and load GeoLite2-City.mmdb...")
+        os.makedirs(self.config.DB_DIR, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         new_db_filename = (
             f"{self.config.DB_FILE_PREFIX}-{timestamp}{self.config.DB_FILE_SUFFIX}"
         )
-        new_db_filepath = os.path.join(os.getcwd(), new_db_filename)
+        new_db_filepath = os.path.join(self.config.DB_DIR, new_db_filename)
 
         try:
             response = requests.get(
@@ -201,6 +203,7 @@ class GeoDBManager:
             ),
             "current_database_version_tag": self.current_db_version_tag,
             "current_database_file": self.current_db_file_path or "N/A",
+            "database_directory": self.config.DB_DIR,
         }
 
 

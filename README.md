@@ -28,8 +28,8 @@ Gunter is a simple Flask-based web service that provides geolocation and WHOIS i
    # Start container
    docker run -d -p 6600:6600 --name gunter ghcr.io/needful-apps/gunter:latest
    
-   # Start container with persistent data
-   docker run -d -p 6600:6600 -v gunter_data:/app --name gunter ghcr.io/needful-apps/gunter:latest
+  # Start container with persistent data
+  docker run -d -p 6600:6600 -v gunter_data:/data --name gunter ghcr.io/needful-apps/gunter:latest
    ```
 
 2. **Podman:**
@@ -40,8 +40,8 @@ Gunter is a simple Flask-based web service that provides geolocation and WHOIS i
    # Start container
    podman run -d -p 6600:6600 --name gunter ghcr.io/needful-apps/gunter:latest
    
-   # Start container with persistent data
-   podman run -d -p 6600:6600 -v gunter_data:/app:Z --name gunter ghcr.io/needful-apps/gunter:latest
+  # Start container with persistent data
+  podman run -d -p 6600:6600 -v gunter_data:/data:Z --name gunter ghcr.io/needful-apps/gunter:latest
    ```
 
 The server will then be available at `http://localhost:6600`.
@@ -160,7 +160,7 @@ services:
       - GUNTER_ENABLE_STATUS=true
       - GUNTER_ENABLE_API_DOCS=true
     volumes:
-      - gunter_data:/app
+  - gunter_data:/data
     restart: unless-stopped
 
   # Production configuration with disabled status and API docs
@@ -173,7 +173,7 @@ services:
       - GUNTER_ENABLE_STATUS=false
       - GUNTER_ENABLE_API_DOCS=false
     volumes:
-      - gunter_data_prod:/app
+  - gunter_data_prod:/data
     restart: unless-stopped
 
 volumes:
