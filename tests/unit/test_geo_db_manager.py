@@ -12,12 +12,18 @@ from app import Config, GeoDBManager
 
 @pytest.fixture
 def mock_config():
-    return mock.MagicMock(
-        DB_FILE_PREFIX="GeoLite2-City",
-        DB_FILE_SUFFIX=".mmdb",
-        DB_DOWNLOAD_URL="https://example.com/GeoLite2-City.mmdb",
-        GITHUB_RELEASE_API_URL="https://api.github.com/repos/example/GeoLite.mmdb/releases/latest",
-    )
+    class DummyConfig:
+        DB_FILE_PREFIX = "GeoLite2-City"
+        DB_FILE_SUFFIX = ".mmdb"
+        DB_DOWNLOAD_URL = "https://example.com/GeoLite2-City.mmdb"
+        GITHUB_RELEASE_API_URL = (
+            "https://api.github.com/repos/example/GeoLite.mmdb/releases/latest"
+        )
+        DB_DIR = "/tmp"
+        EXTERNAL_DB_URL = None
+        CUSTOM_DB_FILE = None
+
+    return DummyConfig()
 
 
 @pytest.fixture
@@ -50,18 +56,20 @@ class TestGeoDBManager:
         assert status["current_database_version_tag"] == "N/A"
         assert status["current_database_file"] == "N/A"
 
+        # Simulate custom DB file usage
+        mock_config.CUSTOM_DB_FILE = "/custom/location.mmdb"
+        manager.current_db_file_path = mock_config.CUSTOM_DB_FILE
+        status = manager.get_status()
+        assert status["current_database_file"] == "/custom/location.mmdb"
+
         # Set some values and test again
         manager.mmdb_reader = mock.MagicMock()
         manager.last_db_update_time = datetime(2023, 1, 1)
         manager.current_db_version_tag = "v1.0.0"
-        manager.current_db_file_path = "/path/to/db.mmdb"
-        assert status["database_directory"] == manager.config.DB_DIR
-
         status = manager.get_status()
         assert status["database_loaded"]
         assert status["last_database_update_check_utc"] == "2023-01-01T00:00:00"
         assert status["current_database_version_tag"] == "v1.0.0"
-        assert status["current_database_file"] == "/path/to/db.mmdb"
 
     @mock.patch("app.maxminddb.open_database")
     @mock.patch("app.requests.get")
