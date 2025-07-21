@@ -12,16 +12,16 @@ services:
       - GUNTER_ENABLE_API_DOCS=true
       - GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key
     volumes:
-    - .:/app
-    # Named volume for the database to persist across container restarts
-    - geolite_db:/data
-      restart: unless-stopped
-      healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
-        interval: 30s
-        timeout: 10s
-        retries: 3
-        start_period: 40s
+      - .:/app
+      # Named volume for the database to persist across container restarts
+      - geolite_db:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
       
   # Example of a production service configuration with disabled status and docs
   gunter-prod:
@@ -35,42 +35,15 @@ services:
       - GUNTER_ENABLE_API_DOCS=false
       - GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key
     volumes:
-    # Only use volume for database persistence
-    - geolite_db:/data
-      restart: unless-stopped
-      healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
-        interval: 30s
-        timeout: 10s
-        retries: 3
-        start_period: 40s
-
-  test:
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-    container_name: gunter_test
-    volumes:
-      - .:/app
-      - ./test_results:/app/test_results
-    environment:
-      - PYTEST_ADDOPTS=--color=yes
-      - PYTHONPATH=/app
-    command: >
-      bash -c "pytest tests/ -v --junitxml=/app/test_results/junit.xml 
-      --cov=. --cov-report=xml:/app/test_results/coverage.xml 
-      --cov-report=html:/app/test_results/htmlcov"
-
-  test-watch:
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-    container_name: gunter_test_watch
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONPATH=/app
-    command: ["pytest-watch", "--runner", "pytest tests/ -v"]
+      # Only use volume for database persistence
+      - geolite_db:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   geolite_db:
