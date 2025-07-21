@@ -22,6 +22,9 @@ def mock_config():
         DB_DIR = "/tmp"
         EXTERNAL_DB_URL = None
         CUSTOM_DB_FILE = None
+        # Neue Attribute für MaxMind-Logik
+        MAXMIND_LICENSE_KEY = None
+        MAXMIND_DOWNLOAD_URL = None
 
     return DummyConfig()
 
@@ -76,7 +79,7 @@ class TestGeoDBManager:
     def test_download_and_load_database_success(
         self, mock_get, mock_open_db, mock_config, temp_dir
     ):
-        """Test successful download and loading of the database."""
+        """Test successful download and loading of the database (externe Quelle)."""
         # Setup mocks
         mock_response = mock.MagicMock()
         mock_response.headers.get.return_value = 100
@@ -86,6 +89,9 @@ class TestGeoDBManager:
 
         mock_reader = mock.MagicMock()
         mock_open_db.return_value = mock_reader
+
+        # EXTERNAL_DB_URL setzen, damit der Download-Zweig getestet wird
+        mock_config.EXTERNAL_DB_URL = mock_config.DB_DOWNLOAD_URL
 
         # Create the manager
         manager = GeoDBManager(mock_config)

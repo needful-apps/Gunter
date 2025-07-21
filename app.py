@@ -28,9 +28,12 @@ class Config:
     DEFAULT_LANG = os.environ.get("GUNTER_LANG", "de")
     DB_FILE_PREFIX = "GeoLite2-City"
     DB_FILE_SUFFIX = ".mmdb"
-    DB_DOWNLOAD_URL = "https://git.io/GeoLite2-City.mmdb"
-    GITHUB_RELEASE_API_URL = (
-        "https://api.github.com/repos/P3TERX/GeoLite.mmdb/releases/latest"
+    # Official MaxMind download URL (tar.gz)
+    MAXMIND_LICENSE_KEY = os.environ.get("GUNTER_MAXMIND_LICENSE_KEY")
+    MAXMIND_DOWNLOAD_URL = (
+        f"https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key={os.environ.get('GUNTER_MAXMIND_LICENSE_KEY','')}&suffix=tar.gz"
+        if os.environ.get("GUNTER_MAXMIND_LICENSE_KEY")
+        else None
     )
     DB_DIR = os.environ.get("GUNTER_DB_DIR", "/data")
     FLASK_HOST = "0.0.0.0"
@@ -199,46 +202,63 @@ class GeoDBManager:
                 self.mmdb_reader = None
             return
 
-        # 3. Default: Download GeoLite2
-        log.info("Attempting to download and load GeoLite2-City.mmdb...")
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        new_db_filename = (
-            f"{self.config.DB_FILE_PREFIX}-{timestamp}{self.config.DB_FILE_SUFFIX}"
-        )
-        new_db_filepath = os.path.join(self.config.DB_DIR, new_db_filename)
-        try:
-            response = requests.get(
-                self.config.DB_DOWNLOAD_URL, stream=True, timeout=60
+        # 3. Default: Download GeoLite2 (official MaxMind, requires license key)
+        import tarfile
+        import tempfile
+
+        if self.config.MAXMIND_LICENSE_KEY and self.config.MAXMIND_DOWNLOAD_URL:
+            log.info(
+                "Attempting to download GeoLite2-City.mmdb from MaxMind (official, license key required)..."
             )
-            response.raise_for_status()
-            total_size = int(response.headers.get("content-length", 0))
-            with Progress() as progress:
-                task = progress.add_task(
-                    "[cyan]Downloading GeoLite2-City.mmdb...", total=total_size
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            tar_gz_path = os.path.join(
+                self.config.DB_DIR, f"GeoLite2-City-{timestamp}.tar.gz"
+            )
+            try:
+                response = requests.get(
+                    self.config.MAXMIND_DOWNLOAD_URL, stream=True, timeout=120
                 )
-                with open(new_db_filepath, "wb") as f:
+                response.raise_for_status()
+                with open(tar_gz_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                        progress.update(task, advance=len(chunk))
-            log.info(f"Successfully downloaded: {new_db_filepath}")
-            if self.mmdb_reader:
-                self.mmdb_reader.close()
-            self.mmdb_reader = maxminddb.open_database(new_db_filepath)
-            self.last_db_update_time = datetime.now()
-            log.info(f"GeoLite2-City.mmdb successfully loaded from {new_db_filepath}.")
-            self._cleanup_old_db_files(new_db_filepath)
-            self.current_db_file_path = new_db_filepath
-        except (
-            requests.exceptions.RequestException,
-            maxminddb.InvalidDatabaseError,
-        ) as e:
-            log.error(f"Error during database update: {e}")
-            self.mmdb_reader = None
-            self._cleanup_failed_download(new_db_filepath)
-        except Exception as e:
-            log.error(f"An unexpected error occurred: {e}")
-            self.mmdb_reader = None
-            self._cleanup_failed_download(new_db_filepath)
+                log.info(f"Downloaded GeoLite2-City archive: {tar_gz_path}")
+                # Extract .mmdb from tar.gz
+                with tarfile.open(tar_gz_path, "r:gz") as tar:
+                    mmdb_member = next(
+                        (m for m in tar.getmembers() if m.name.endswith(".mmdb")), None
+                    )
+                    if not mmdb_member:
+                        raise RuntimeError(
+                            "No .mmdb file found in the MaxMind archive!"
+                        )
+                    extracted_path = os.path.join(
+                        self.config.DB_DIR, f"GeoLite2-City-{timestamp}.mmdb"
+                    )
+                    with open(extracted_path, "wb") as out_f:
+                        out_f.write(tar.extractfile(mmdb_member).read())
+                log.info(f"Extracted MMDB: {extracted_path}")
+                if self.mmdb_reader:
+                    self.mmdb_reader.close()
+                self.mmdb_reader = maxminddb.open_database(extracted_path)
+                self.last_db_update_time = datetime.now()
+                self._cleanup_old_db_files(extracted_path)
+                self.current_db_file_path = extracted_path
+                log.info(
+                    f"GeoLite2-City.mmdb successfully loaded from {extracted_path}."
+                )
+            except Exception as e:
+                log.error(
+                    f"Failed to download/extract/load official MaxMind GeoLite2 DB: {e}"
+                )
+                self.mmdb_reader = None
+                self._cleanup_failed_download(tar_gz_path)
+            return
+        # Fallback: legacy or error
+        log.error(
+            "No valid MaxMind license key provided. Cannot download GeoLite2-City.mmdb. Please set GUNTER_MAXMIND_LICENSE_KEY."
+        )
+        self.mmdb_reader = None
 
     def check_for_new_release_and_update(self):
         """Checks for a new version and updates if necessary. Skips if EXTERNAL_DB_URL or CUSTOM_DB_FILE is set."""
