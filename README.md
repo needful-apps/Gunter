@@ -22,7 +22,7 @@ For quick setup, you can run Gunter using Docker or Podman. This is the recommen
 All you need is a MaxMind license key to download the official GeoLite2 database. Your can obtain a free license key from [MaxMind](https://www.maxmind.com/en/geolite2/signup).
 
 **Note:**
-You can also use your own GeoIP database files (e.g. from db-ip.com) by placing them in the data directory or mounting them as a volume. See the configuration section for more details.
+You can also use your own GeoIP database files (e.g. from db-ip.com) by placing them in the data directory or mounting them as a volume, or by providing a direct download URL. See the configuration section for more details.
 
 1. **Docker:**
   ```bash
@@ -95,8 +95,9 @@ The server will then be available at `http://localhost:6600`.
 
 - `GET /api/status`: Shows the current status of the GeoLite2 database. (Can be disabled via configuration)
 
+# Example API calls:
 
-
+```bash
 # Geo-lookup for an IP
 curl http://localhost:6600/api/geo-lookup/8.8.8.8
 
@@ -104,18 +105,18 @@ curl http://localhost:6600/api/geo-lookup/8.8.8.8
 curl http://localhost:6600/api/whois/8.8.8.8
 
 # Geo-lookup for a domain
+curl http://localhost:6600/api/geo-lookup/example.com
 ```
 
 You can also explore and test the API using the built-in Swagger UI by accessing `http://localhost:6600/api/docs` in your browser (if the API docs are enabled).
 
 ### Docker-Compose
-
+```bash
 # Start the service
 docker-compose up -d
 
 # Start the service with tests
 docker-compose up test
-
 ```
 
 ## Configuration Options
