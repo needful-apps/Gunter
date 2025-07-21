@@ -12,16 +12,16 @@ services:
       - GUNTER_ENABLE_API_DOCS=true
       - GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key
     volumes:
-  - .:/app
-  # Named volume for the database to persist across container restarts
-  - geolite_db:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    - .:/app
+    # Named volume for the database to persist across container restarts
+    - geolite_db:/data
+      restart: unless-stopped
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 40s
       
   # Example of a production service configuration with disabled status and docs
   gunter-prod:
@@ -35,15 +35,15 @@ services:
       - GUNTER_ENABLE_API_DOCS=false
       - GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key
     volumes:
-  # Only use volume for database persistence
-  - geolite_db:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # Only use volume for database persistence
+    - geolite_db:/data
+      restart: unless-stopped
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:6600/api/geo-lookup/8.8.8.8"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 40s
 
   test:
     build:
