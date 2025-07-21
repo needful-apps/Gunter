@@ -10,6 +10,7 @@ services:
       # Enable status endpoint and API docs for development
       - GUNTER_ENABLE_STATUS=true
       - GUNTER_ENABLE_API_DOCS=true
+      - GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key
     volumes:
   - .:/app
   # Named volume for the database to persist across container restarts
@@ -32,6 +33,7 @@ services:
       # Disable status endpoint and API docs for production
       - GUNTER_ENABLE_STATUS=false
       - GUNTER_ENABLE_API_DOCS=false
+      - GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key
     volumes:
   # Only use volume for database persistence
   - geolite_db:/data
