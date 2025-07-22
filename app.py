@@ -25,7 +25,7 @@ class Config:
     EXTERNAL_DB_URL = os.environ.get(
         "GUNTER_DB_URL"
     )  # New: external MMDB source (http(s), ftp(s))
-    DEFAULT_LANG = os.environ.get("GUNTER_LANG", "de")
+    DEFAULT_LANG = os.environ.get("GUNTER_LANG", "en")
     DB_FILE_PREFIX = "GeoLite2-City"
     DB_FILE_SUFFIX = ".mmdb"
     # Official MaxMind download URL (tar.gz)
