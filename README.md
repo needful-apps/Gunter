@@ -89,7 +89,7 @@ The server will then be available at `http://localhost:6600`.
 
 - `GET /api/geo-lookup/<ip>`: Retrieves geolocation data for the given IP.
   - Query Parameters:
-    - `lang`: Language for the response (e.g., `en`, `de`, `fr`). Defaults to `de`.
+    - `lang`: Language for the response (e.g., `en`, `de`, `fr`). Defaults to `en`.
     - `exclude_whois`: Set to `true` to omit WHOIS data from the response.
 - `GET /api/whois/<target>`: Retrieves WHOIS data for an IP address.
 
