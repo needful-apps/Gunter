@@ -1,177 +1,195 @@
-# Gunter
+Gunter
+Gunter is a simple Flask-based web service that provides geolocation and WHOIS information for IP addresses and domains. It automatically downloads and keeps the GeoLite2-City database updated.
 
-[![Python Version](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)
-[![needful-apps](https://img.shields.io/badge/by-needful--apps-008080)](https://needful-apps.de)
+Developed by needful-apps
+Python Version: Latest compatible with Flask
+License: MIT
+PRs Welcome!
 
-Gunter is a simple Flask-based web service that provides geolocation and WHOIS information for IP addresses and domains. It automatically downloads and keeps the GeoLite2-City database updated.   
-Developed by [needful-apps](https://needful-apps.de).
+📚 Table of Contents
+Features
 
-## Features
+Installation
 
-- **Geo-IP Lookup**: Get detailed geolocation data for any IP address.
-- **WHOIS Lookup**: Perform WHOIS queries for both IP addresses and domain names.
-- **Reverse DNS**: Resolve IP addresses to hostnames.
-- **Automatic Database Updates**: The service regularly checks for and downloads the latest GeoLite2 database from a public repository.
+Using Docker (Recommended)
 
-## Easy Setup
+Using Podman
 
-For quick setup, you can run Gunter using Docker or Podman. This is the recommended way to get started.
+Local Installation
 
-All you need is a MaxMind license key to download the official GeoLite2 database. Your can obtain a free license key from [MaxMind](https://www.maxmind.com/en/geolite2/signup).
+Running the App
 
-**Note:**
-You can also use your own GeoIP database files (e.g. from db-ip.com) by placing them in the data directory or mounting them as a volume, or by providing a direct download URL. See the configuration section for more details.
+API Endpoints
 
-1. **Docker:**
-  ```bash
-  # Download container
-  docker pull ghcr.io/needful-apps/gunter:latest
+Configuration
 
-  # Start container (official MaxMind download, license key required)
-  docker run -d -p 6600:6600 -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key --name gunter ghcr.io/needful-apps/gunter:latest
+Examples
 
-  # Start container with persistent data and MaxMind license key
-  docker run -d -p 6600:6600 -v gunter_data:/data -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key --name gunter ghcr.io/needful-apps/gunter:latest
-  ```
+Legal Notice on External GeoIP Databases
 
-2. **Podman:**
-  ```bash
-  # Download container
-  podman pull ghcr.io/needful-apps/gunter:latest
+🚀 Features
+Geo-IP Lookup: Get detailed geolocation data for any IP address.
 
-  # Start container (official MaxMind download, license key required)
-  podman run -d -p 6600:6600 -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key --name gunter ghcr.io/needful-apps/gunter:latest
+WHOIS Lookup: Perform WHOIS queries for IP addresses and domain names.
 
-  # Start container with persistent data and MaxMind license key
-  podman run -d -p 6600:6600 -v gunter_data:/data:Z -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key --name gunter ghcr.io/needful-apps/gunter:latest
-  ```
+Reverse DNS: Resolve IP addresses to hostnames.
 
-The server will then be available at `http://localhost:6600`.
+Automatic Database Updates: Keeps GeoLite2 database up to date.
 
-### Option 2: Local Installation
+Swagger UI: API documentation via browser interface.
 
-1.  **Clone the repository:**
-  ```bash
-  git clone git@github.com:needful-apps/Gunter.git
-  cd Gunter
-  ```
+Easy Containerized Setup: Supports Docker, Podman, and Compose.
 
-2.  **Install dependencies:**
-  It's recommended to use a virtual environment.
-  ```bash
-  python -m venv venv
-  source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-  pip install -r requirements.txt
+⚙️ Installation
+Using Docker (Recommended)
+bash
+Copy
+Edit
+# Pull image
+docker pull ghcr.io/needful-apps/gunter:latest
 
-  # For development:
-  pip install -r requirements-dev.txt
-  ```
+# Run with MaxMind license key
+docker run -d -p 6600:6600 \
+  -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key \
+  --name gunter ghcr.io/needful-apps/gunter:latest
 
-3.  **Code-Formatting and Quality:**
-  ```bash
-  # Format code with Black and isort
-  ./scripts/format_code.sh
+# Persistent volume
+docker run -d -p 6600:6600 \
+  -v gunter_data:/data \
+  -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key \
+  --name gunter ghcr.io/needful-apps/gunter:latest
+Using Podman
+bash
+Copy
+Edit
+# Pull image
+podman pull ghcr.io/needful-apps/gunter:latest
 
-  # Or install pre-commit hooks for automatic formatting
-  pre-commit install
-  ```
-  For detailed information about code formatting, see [FORMATTING.md](FORMATTING.md).
+# Run with MaxMind license key
+podman run -d -p 6600:6600 \
+  -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key \
+  --name gunter ghcr.io/needful-apps/gunter:latest
 
-4.  **Run the application:**
-  ```bash
-  python app.py
-  ```
-  The server will start on `http://0.0.0.0:6600`. The first run will download the GeoLite2 database, which may take a moment.
+# Persistent volume
+podman run -d -p 6600:6600 \
+  -v gunter_data:/data:Z \
+  -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key \
+  --name gunter ghcr.io/needful-apps/gunter:latest
+Local Installation
+bash
+Copy
+Edit
+# Clone repo
+git clone https://github.com/needful-apps/Gunter.git
+cd Gunter
 
-## API Endpoints
+# Setup virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-- `GET /api/geo-lookup/<ip>`: Retrieves geolocation data for the given IP.
-  - Query Parameters:
-    - `lang`: Language for the response (e.g., `en`, `de`, `fr`). Defaults to `en`.
-    - `exclude_whois`: Set to `true` to omit WHOIS data from the response.
-- `GET /api/whois/<target>`: Retrieves WHOIS data for an IP address.
+# Install dependencies
+pip install -r requirements.txt
 
-- `GET /api/status`: Shows the current status of the GeoLite2 database. (Can be disabled via configuration)
+# For development
+pip install -r requirements-dev.txt
+Formatting Code (Optional)
+bash
+Copy
+Edit
+# Format using Black and isort
+./scripts/format_code.sh
 
-# Example API calls:
+# Or install pre-commit hook
+pre-commit install
+▶️ Running the App
+bash
+Copy
+Edit
+python app.py
+Runs on: http://0.0.0.0:6600
 
-```bash
-# Geo-lookup for an IP
+First startup will fetch the GeoLite2 database.
+
+📡 API Endpoints
+GET /api/geo-lookup/<ip_or_domain>
+Returns geolocation + WHOIS data.
+
+Query Parameters:
+
+lang: Language code (e.g. en, de, fr). Default: en
+
+exclude_whois: Set to true to skip WHOIS
+
+GET /api/whois/<target>
+Returns WHOIS info for IP/domain.
+
+GET /api/status
+Returns GeoLite2 database update status.
+(Can be disabled via config)
+
+API Documentation
+Swagger UI: http://localhost:6600/api/docs
+
+🧩 Configuration
+Configure the service using environment variables:
+
+Variable	Description	Default
+GUNTER_ENABLE_STATUS	Enable /api/status endpoint	true
+GUNTER_ENABLE_API_DOCS	Enable Swagger UI at /api/docs	true
+GUNTER_LANG	Default language for responses (en, de, fr, etc.)	de
+GUNTER_MAXMIND_LICENSE_KEY	MaxMind license key for GeoLite2 download	(Required for automatic DB)
+GUNTER_DB_FILE	Path to a local .mmdb file	None
+GUNTER_DB_URL	URL to external .mmdb file	None
+
+Priority of databases:
+
+GUNTER_DB_URL (highest)
+
+GUNTER_DB_FILE
+
+MaxMind GeoLite2 (if license key provided)
+
+🧪 Examples
+Geo Lookup
+bash
+Copy
+Edit
 curl http://localhost:6600/api/geo-lookup/8.8.8.8
-
-# WHOIS query for an IP
-curl http://localhost:6600/api/whois/8.8.8.8
-
-# Geo-lookup for a domain
-curl http://localhost:6600/api/geo-lookup/example.com
-```
-
-You can also explore and test the API using the built-in Swagger UI by accessing `http://localhost:6600/api/docs` in your browser (if the API docs are enabled).
-
-### Docker-Compose
-```bash
-# Start the service
+WHOIS Lookup
+bash
+Copy
+Edit
+curl http://localhost:6600/api/whois/example.com
+Using Docker with Custom MMDB
+bash
+Copy
+Edit
+docker run -d -p 6600:6600 \
+  -v $(pwd)/data:/data \
+  -e GUNTER_DB_FILE=/data/dbip-city-isp.mmdb \
+  --name gunter-custom gunter-local
+Using External MMDB URL
+bash
+Copy
+Edit
+docker run -d -p 6600:6600 \
+  -e GUNTER_DB_URL=https://example.com/your.mmdb \
+  --name gunter-external gunter-local
+🧷 Docker Compose
+bash
+Copy
+Edit
+# Start service
 docker-compose up -d
 
-# Start the service with tests
+# Run with tests
 docker-compose up test
-```
+⚖️ Legal Notice on External GeoIP Databases
+This application includes automatic downloading of the free MaxMind GeoLite2 database (see MaxMind EULA).
 
-## Configuration Options
+No third-party or commercial databases are bundled or distributed.
 
+You are responsible for having valid licenses for any external .mmdb files you provide.
 
-The service can be configured using the following environment variables:
+The maintainers do not assume liability for misuse or licensing violations.
 
-- `GUNTER_ENABLE_STATUS`: Controls whether the `/api/status` endpoint is enabled. Set to `false` to disable. Default: `true`.
-- `GUNTER_ENABLE_API_DOCS`: Controls whether the OpenAPI documentation at `/api/docs` is enabled. Set to `false` to disable. Default: `true`.
-- `GUNTER_LANG`: Sets the default language for all API responses (e.g. `en`, `de`, `fr`). If not set, defaults to `de`. This can be overridden per request using the `?lang=` query parameter.
-- `GUNTER_MAXMIND_LICENSE_KEY`: (recommended) Your MaxMind license key. If set, the official GeoLite2-City database will be downloaded directly from MaxMind on startup and on every scheduled update. Example: `-e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key`
-- `GUNTER_DB_FILE`: (optional) Path to a custom MMDB database file (e.g. from db-ip.com). If set, this file will be used instead of the default MaxMind GeoLite2 database. Example: `-e GUNTER_DB_FILE=/data/dbip-city-isp.mmdb`
-- `GUNTER_DB_URL`: (optional, recommended for automation) URL to an external MMDB database (supports http, https, ftp, ftps). If set, the database will be downloaded from this source at startup and on every scheduled update. Example: `-e GUNTER_DB_URL=https://example.com/your.mmdb`
-
-
-
-### Example: Setting environment variables
-
-```bash
-# Docker (official MaxMind download, language English)
-docker run -d -p 6600:6600 -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key -e GUNTER_LANG=en --name gunter ghcr.io/needful-apps/gunter:latest
-
-# Podman (official MaxMind download, language French)
-podman run -d -p 6600:6600 -e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key -e GUNTER_LANG=fr --name gunter ghcr.io/needful-apps/gunter:latest
-```
-
-
-### Example: Using a custom or external MMDB database
-
-You may use your own GeoIP database files (e.g. commercial or custom MMDB files such as those from db-ip.com) by placing them in the data directory or mounting them as a volume. To use a specific file, set the `GUNTER_DB_FILE` environment variable to the path of your MMDB file.
-
-```bash
-# Mount your own db-ip.com MMDB file and set the environment variable
-docker run -d -p 6600:6600 -v $(pwd)/data:/data -e GUNTER_DB_FILE=/data/dbip-city-isp.mmdb --name gunter-custom gunter-local
-```
-
-Alternatively, you can provide a direct download URL (http, https, ftp, ftps) for your MMDB file. This is useful for automated updates from a remote source:
-
-```bash
-# Download and use an external MMDB file from a URL (checked on every update)
-docker run -d -p 6600:6600 -e GUNTER_DB_URL=https://example.com/your.mmdb --name gunter-external gunter-local
-```
-
-**Note:**
-- If you use a custom MMDB database via `GUNTER_DB_FILE`, no updates or downloads of the MaxMind GeoLite2 database will be performed. The application will exclusively use the specified file and will not check for new versions of the MaxMind database.
-- If you use an external URL via `GUNTER_DB_URL`, this source takes precedence over `GUNTER_DB_FILE` and the MaxMind GeoLite2 database. The file will be downloaded at startup and on every scheduled update.
-
----
-
-## Legal Notice on External GeoIP Databases
-
-By default, this application automatically downloads and uses the free MaxMind GeoLite2 database (see [MaxMind license](https://www.maxmind.com/en/geolite2/eula)).
-
-**No third-party or commercial databases (other than MaxMind GeoLite2) are included or distributed with this software.**
-
-**It is your responsibility to ensure you have the appropriate license and rights to use any external database you provide.**
-
-The maintainers of this project do not provide, redistribute, or assume liability for the use of any external or commercial GeoIP databases.
