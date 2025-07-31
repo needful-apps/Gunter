@@ -130,6 +130,7 @@ The service can be configured using the following environment variables:
 - `GUNTER_MAXMIND_LICENSE_KEY`: (recommended) Your MaxMind license key. If set, the official GeoLite2-City database will be downloaded directly from MaxMind on startup and on every scheduled update. Example: `-e GUNTER_MAXMIND_LICENSE_KEY=your_maxmind_license_key`
 - `GUNTER_DB_FILE`: (optional) Path to a custom MMDB database file (e.g. from db-ip.com). If set, this file will be used instead of the default MaxMind GeoLite2 database. Example: `-e GUNTER_DB_FILE=/data/dbip-city-isp.mmdb`
 - `GUNTER_DB_URL`: (optional, recommended for automation) URL to an external MMDB database (supports http, https, ftp, ftps). If set, the database will be downloaded from this source at startup and on every scheduled update. Example: `-e GUNTER_DB_URL=https://example.com/your.mmdb`
+- `GUNTER_CORS_ORIGINS`: (optional) A comma-separated list of allowed origins for CORS. Use `*` to allow all origins. Example: `-e GUNTER_CORS_ORIGINS=https://example.com,https://another.site`
 
 
 
