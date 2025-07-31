@@ -124,15 +124,24 @@ class TestGeoDBManager:
         assert manager.mmdb_reader is None
         assert manager.current_db_file_path is None
 
-    @mock.patch("app.requests.get")
-    def test_check_for_new_release_new_version(self, mock_get, mock_config):
-        """Test checking for a new release when a new version is available."""
-        # Setup mock response
-        mock_response = mock.MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {"tag_name": "v1.0.1"}
-        mock_get.return_value = mock_response
+    def test_check_for_new_release_new_version(self, mock_config):
+        """Test checking for a new release when EXTERNAL_DB_URL and CUSTOM_DB_FILE are not set."""
+        # Create the manager
+        manager = GeoDBManager(mock_config)
+        manager.current_db_version_tag = "v1.0.0"
 
+        # Mock the download method
+        manager.download_and_load_database = mock.MagicMock()
+
+        # Test the method - should just log and return without calling GitHub API
+        manager.check_for_new_release_and_update()
+
+        # Assertions - no HTTP calls should be made and version should remain unchanged
+        assert manager.current_db_version_tag == "v1.0.0"
+        manager.download_and_load_database.assert_not_called()
+
+    def test_check_for_new_release_same_version(self, mock_config):
+        """Test checking for a new release when the current version is up to date (method now just logs)."""
         # Create the manager and set current version
         manager = GeoDBManager(mock_config)
         manager.current_db_version_tag = "v1.0.0"
@@ -140,34 +149,10 @@ class TestGeoDBManager:
         # Mock the download method
         manager.download_and_load_database = mock.MagicMock()
 
-        # Test the method
+        # Test the method - should just log and return
         manager.check_for_new_release_and_update()
 
-        # Assertions
-        mock_get.assert_called_once_with(mock_config.GITHUB_RELEASE_API_URL, timeout=10)
-        assert manager.current_db_version_tag == "v1.0.1"
-        manager.download_and_load_database.assert_called_once()
-
-    @mock.patch("app.requests.get")
-    def test_check_for_new_release_same_version(self, mock_get, mock_config):
-        """Test checking for a new release when the current version is up to date."""
-        # Setup mock response
-        mock_response = mock.MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {"tag_name": "v1.0.0"}
-        mock_get.return_value = mock_response
-
-        # Create the manager and set current version
-        manager = GeoDBManager(mock_config)
-        manager.current_db_version_tag = "v1.0.0"
-
-        # Mock the download method
-        manager.download_and_load_database = mock.MagicMock()
-
-        # Test the method
-        manager.check_for_new_release_and_update()
-
-        # Assertions
+        # Assertions - version should remain unchanged and no download should be called
         assert manager.current_db_version_tag == "v1.0.0"
         manager.download_and_load_database.assert_not_called()
 

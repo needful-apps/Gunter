@@ -4,14 +4,17 @@ from unittest import mock
 import pytest
 from flask import Flask
 
-from app import app, db_manager, whois_service
+# Importiere die App-Erstellungslogik, aber nicht die globale Instanz
+from app import create_app, db_manager, whois_service
 
 
 @pytest.fixture
-def client():
-    """Create a test client for the Flask app."""
+def client(monkeypatch):
+    """Create a test client for the Flask app for each test."""
+    # Standardmäßig CORS deaktivieren, wenn nicht anders angegeben
+    monkeypatch.delenv("GUNTER_CORS_ORIGINS", raising=False)
+    app = create_app()
     with app.test_client() as client:
-        # Set the application context
         with app.app_context():
             yield client
 
@@ -161,3 +164,83 @@ class TestAPIEndpoints:
         assert "error" in data
         assert "internal server error" in data["error"].lower()
         mock_get_whois_data.assert_called_once_with("example.com")
+
+
+def create_test_client_with_cors(monkeypatch, cors_origins):
+    """Factory function to create a test client with specific CORS settings."""
+    if cors_origins:
+        monkeypatch.setenv("GUNTER_CORS_ORIGINS", cors_origins)
+    else:
+        monkeypatch.delenv("GUNTER_CORS_ORIGINS", raising=False)
+
+    app = create_app()
+    return app.test_client()
+
+
+class TestCORSHeaders:
+    @pytest.mark.parametrize(
+        "cors_origins,expected_header",
+        [
+            (None, None),  # CORS disabled
+            ("*", "*"),  # Wildcard origin
+            ("https://example.com", "https://example.com"),  # Specific origin
+        ],
+    )
+    @mock.patch.object(db_manager, "mmdb_reader")
+    def test_cors_headers_on_get_request(
+        self, mock_reader, cors_origins, expected_header, monkeypatch
+    ):
+        """Test that CORS headers are correctly set on GET requests based on env var."""
+        client = create_test_client_with_cors(monkeypatch, cors_origins)
+
+        with client:
+            # Mock the database reader to avoid 503 errors
+            mock_reader.get.return_value = {"country": {"names": {"en": "Test"}}}
+            db_manager.mmdb_reader = mock_reader
+
+            # GET requests need an Origin header for the CORS logic to trigger
+            headers = {"Origin": "https://example.com"}
+            response = client.get("/api/geo-lookup/1.1.1.1", headers=headers)
+
+            assert response.status_code == 200
+            if expected_header:
+                assert (
+                    response.headers.get("Access-Control-Allow-Origin")
+                    == expected_header
+                )
+            else:
+                assert "Access-Control-Allow-Origin" not in response.headers
+
+    @pytest.mark.parametrize(
+        "cors_origins,request_origin,expected_header",
+        [
+            ("*", "https://any.site", "*"),
+            ("https://example.com", "https://example.com", "https://example.com"),
+            (
+                "https://example.com,https://another.site",
+                "https://another.site",
+                "https://another.site",
+            ),
+        ],
+    )
+    def test_cors_preflight_request(
+        self, cors_origins, request_origin, expected_header, monkeypatch
+    ):
+        """Test OPTIONS (preflight) requests are handled correctly."""
+        client = create_test_client_with_cors(monkeypatch, cors_origins)
+
+        with client:
+            headers = {
+                "Access-Control-Request-Method": "GET",
+                "Origin": request_origin,
+            }
+            response = client.options("/api/geo-lookup/1.1.1.1", headers=headers)
+
+            assert response.status_code == 200
+            assert (
+                response.headers.get("Access-Control-Allow-Origin") == expected_header
+            )
+            assert "GET" in response.headers.get("Access-Control-Allow-Methods")
+            assert "Content-Type" in response.headers.get(
+                "Access-Control-Allow-Headers"
+            )

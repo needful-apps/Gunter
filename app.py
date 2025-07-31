@@ -4,7 +4,7 @@ import logging
 import os
 import socket
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TypedDict, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 import maxminddb
 import requests
@@ -20,15 +20,11 @@ from waitress import serve
 
 # --- Configuration ---
 class Config:
-    # Allow user to specify a custom MMDB file (e.g. from db-ip.com)
     CUSTOM_DB_FILE = os.environ.get("GUNTER_DB_FILE")
-    EXTERNAL_DB_URL = os.environ.get(
-        "GUNTER_DB_URL"
-    )  # New: external MMDB source (http(s), ftp(s))
-    DEFAULT_LANG = os.environ.get("GUNTER_LANG", "en")
+    EXTERNAL_DB_URL = os.environ.get("GUNTER_DB_URL")
+    DEFAULT_LANG = os.environ.get("GUNTER_LANG", "de")
     DB_FILE_PREFIX = "GeoLite2-City"
     DB_FILE_SUFFIX = ".mmdb"
-    # Official MaxMind download URL (tar.gz)
     MAXMIND_LICENSE_KEY = os.environ.get("GUNTER_MAXMIND_LICENSE_KEY")
     MAXMIND_DOWNLOAD_URL = (
         f"https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key={os.environ.get('GUNTER_MAXMIND_LICENSE_KEY','')}&suffix=tar.gz"
@@ -39,12 +35,11 @@ class Config:
     FLASK_HOST = "0.0.0.0"
     FLASK_PORT = 6600
     SCHEDULER_UPDATE_DAYS = 1
-
-    # Feature flags - can be controlled via environment variables
     ENABLE_STATUS_ENDPOINT = (
         os.environ.get("GUNTER_ENABLE_STATUS", "true").lower() == "true"
     )
     ENABLE_API_DOCS = os.environ.get("GUNTER_ENABLE_API_DOCS", "true").lower() == "true"
+    CORS_ORIGINS = os.environ.get("GUNTER_CORS_ORIGINS")
 
 
 # --- Logging Setup ---
@@ -56,39 +51,8 @@ logging.basicConfig(
 )
 log = logging.getLogger("rich")
 
-app = Flask(__name__)
-
-# --- Initialize config first ---
-config = Config()
-
-# --- OpenAPI/Swagger Setup ---
-api = Api(
-    app,
-    version="1.0",
-    title="Gunter API",
-    description="API for Geolocation, WHOIS queries, and Reverse DNS",
-    doc=(
-        "/api/docs" if config.ENABLE_API_DOCS else False
-    ),  # Disable Swagger UI if not enabled
-    prefix="/api",
-)
-
-# Define namespaces for different endpoints
-geo_ns = Namespace("geo-lookup", description="Geolocation endpoint")
-whois_ns = Namespace("whois", description="WHOIS query endpoint")
-
-# Always add the core functional namespaces
-api.add_namespace(geo_ns)
-api.add_namespace(whois_ns)
-
-# Conditionally create and add the status namespace if enabled
-if config.ENABLE_STATUS_ENDPOINT:
-    status_ns = Namespace("status", description="Status endpoint")
-    api.add_namespace(status_ns)
 
 # --- Service classes for encapsulated logic ---
-
-
 class GeoDBManager:
     """Manages the lifecycle of the GeoLite2 database."""
 
@@ -146,7 +110,6 @@ class GeoDBManager:
                     import ftplib
                     from contextlib import closing
 
-                    # Basic FTP/FTPS support (anonymous or user:pass in URL)
                     ftp_host = parsed.hostname
                     ftp_port = parsed.port or (990 if parsed.scheme == "ftps" else 21)
                     ftp_user = parsed.username or "anonymous"
@@ -160,7 +123,6 @@ class GeoDBManager:
                         with open(new_db_filepath, "wb") as f:
                             ftp.retrbinary(f"RETR {ftp_path}", f.write)
                 else:
-                    # HTTP(S) download
                     response = requests.get(url, stream=True, timeout=60)
                     response.raise_for_status()
                     total_size = int(response.headers.get("content-length", 0))
@@ -204,7 +166,6 @@ class GeoDBManager:
 
         # 3. Default: Download GeoLite2 (official MaxMind, requires license key)
         import tarfile
-        import tempfile
 
         if self.config.MAXMIND_LICENSE_KEY and self.config.MAXMIND_DOWNLOAD_URL:
             log.info(
@@ -223,7 +184,6 @@ class GeoDBManager:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
                 log.info(f"Downloaded GeoLite2-City archive: {tar_gz_path}")
-                # Extract .mmdb from tar.gz
                 with tarfile.open(tar_gz_path, "r:gz") as tar:
                     mmdb_member = next(
                         (m for m in tar.getmembers() if m.name.endswith(".mmdb")), None
@@ -254,7 +214,6 @@ class GeoDBManager:
                 self.mmdb_reader = None
                 self._cleanup_failed_download(tar_gz_path)
             return
-        # Fallback: legacy or error
         log.error(
             "No valid MaxMind license key provided. Cannot download GeoLite2-City.mmdb. Please set GUNTER_MAXMIND_LICENSE_KEY."
         )
@@ -262,40 +221,16 @@ class GeoDBManager:
 
     def check_for_new_release_and_update(self):
         """Checks for a new version and updates if necessary. Skips if EXTERNAL_DB_URL or CUSTOM_DB_FILE is set."""
-        if self.config.EXTERNAL_DB_URL:
+        if self.config.EXTERNAL_DB_URL or self.config.CUSTOM_DB_FILE:
             log.info(
-                "External DB URL set (GUNTER_DB_URL). Skipping update check for GeoLite2-City.mmdb."
+                "External or custom DB set. Skipping automatic MaxMind update check."
             )
             return
-        if self.config.CUSTOM_DB_FILE:
-            log.info(
-                "Custom MMDB set (GUNTER_DB_FILE). Skipping update check for GeoLite2-City.mmdb."
-            )
-            return
-        log.info("Checking for new GeoLite2-City.mmdb releases on GitHub...")
-        try:
-            response = requests.get(self.config.GITHUB_RELEASE_API_URL, timeout=10)
-            response.raise_for_status()
-            latest_release = response.json()
-            latest_tag = latest_release.get("tag_name")
-
-            if not latest_tag:
-                log.warning("Could not find 'tag_name' in the latest GitHub release.")
-                return
-
-            log.info(f"Latest GitHub release tag: {latest_tag}")
-            if latest_tag != self.current_db_version_tag:
-                log.info(
-                    f"New release found! Current: {self.current_db_version_tag}, Latest: {latest_tag}"
-                )
-                self.current_db_version_tag = latest_tag
-                self.download_and_load_database()
-            else:
-                log.info("GeoLite2-City.mmdb is already up to date.")
-        except requests.exceptions.RequestException as e:
-            log.error(f"Error checking GitHub releases: {e}")
-        except json.JSONDecodeError:
-            log.error("Error parsing GitHub API response.")
+        # This method would need to be adapted if we want to update from MaxMind directly
+        # For now, it's a placeholder or would need a different mechanism (e.g., checking MaxMind's site)
+        log.info(
+            "Automatic update check is only supported for the legacy GitHub repository method and is currently bypassed."
+        )
 
     def get_status(self) -> Dict[str, Any]:
         """Returns the current status of the database."""
@@ -339,21 +274,16 @@ class WhoisService:
 
     def _get_domain_whois(self, domain: str) -> Dict[str, Any]:
         try:
-            # Die python-whois Bibliothek hat sich geändert, query existiert nicht mehr
-            # Jetzt wird direkt whois() verwendet
             domain_info = whois.whois(domain)
             log.info(f"Domain WHOIS lookup for {domain} successful.")
-            # Konvertiere das Ergebnis in ein serialisierbares Dictionary
             if domain_info:
-                # Filtere und konvertiere Datumswerte
                 info_dict: Dict[str, Union[str, List[str], Dict[str, Any], None]] = {}
                 for k, v in domain_info.items():
                     if isinstance(v, datetime):
                         info_dict[k] = v.isoformat()
                     elif isinstance(v, list) and v and isinstance(v[0], datetime):
-                        # Explizit die Liste von formatierten Zeitstempeln erstellen
                         formatted_dates = [item.isoformat() for item in v]
-                        info_dict[k] = formatted_dates  # Explizite Zuweisung der Liste
+                        info_dict[k] = formatted_dates
                     elif v is not None:
                         info_dict[k] = v
                 return info_dict
@@ -402,7 +332,6 @@ def filter_names_by_lang(
                 or names.get(fallback_lang)
                 or next(iter(names.values()), None)
             )
-
             new_dict: Dict[str, Any] = {
                 k: filter_names_by_lang(v, lang_code, fallback_lang)
                 for k, v in data.items()
@@ -420,182 +349,249 @@ def filter_names_by_lang(
     return data
 
 
-database_status_model = api.model(
-    "DatabaseStatus",
-    {
-        "database_loaded": fields.Boolean(
-            description="Indicates if the database is loaded"
-        ),
-        "last_database_update_check_utc": fields.String(
-            description="Timestamp of the last database update check"
-        ),
-        "current_database_version_tag": fields.String(
-            description="Current database version"
-        ),
-        "current_database_file": fields.String(
-            description="Currently used database file"
-        ),
-    },
-)
-
-whois_data_model = api.model(
-    "WhoisData",
-    {
-        "target": fields.String(description="Target of the WHOIS query (IP or domain)"),
-        "lookup_timestamp": fields.String(description="Query timestamp"),
-        "ip_whois": fields.Raw(description="WHOIS data for IP addresses"),
-        "domain_whois": fields.Raw(description="WHOIS data for domains"),
-        "reverse_dns": fields.String(description="Reverse DNS result (if available)"),
-    },
-)
-
-geo_lookup_model = api.model(
-    "GeoLookup",
-    {
-        "city": fields.Raw(description="City information"),
-        "country": fields.Raw(description="Country information"),
-        "continent": fields.Raw(description="Continent information"),
-        "location": fields.Raw(description="Location information (coordinates)"),
-        "postal": fields.Raw(description="Postal code information"),
-        "subdivisions": fields.Raw(
-            description="Subdivisions information (states, provinces)"
-        ),
-        "registered_country": fields.Raw(description="Registered country information"),
-        "database_info": fields.Raw(description="Database status information"),
-        "whois_data": fields.Nested(
-            whois_data_model, description="WHOIS data (optional)"
-        ),
-    },
-)
-
-# --- Service Initialization ---
-db_manager = GeoDBManager(config)
+# --- Global Service Instances ---
+db_manager = GeoDBManager(Config())
 whois_service = WhoisService()
 
 
-@geo_ns.route("/<string:ip>")
-@geo_ns.doc(
-    params={"ip": "IP address for geolocation"},
-    responses={
-        200: "Success",
-        400: "Invalid IP address",
-        404: "IP address not found",
-        503: "GeoLite2 database not available",
-    },
-)
-class GeoLookup(Resource):
-    @geo_ns.doc(
-        params={
-            "lang": "Language code for the response (e.g., de, en, fr)",
-            "exclude_whois": "If true, WHOIS data will be excluded from the response",
-        }
+def create_app():
+    """Creates and configures the Flask application."""
+    app = Flask(__name__)
+    config = Config()
+
+    # Add manual CORS handler
+    @app.after_request
+    def after_request(response):
+        cors_origins = os.environ.get("GUNTER_CORS_ORIGINS")
+        if cors_origins:
+            origin = request.headers.get("Origin")
+            if origin:
+                if cors_origins == "*":
+                    response.headers["Access-Control-Allow-Origin"] = "*"
+                else:
+                    allowed_origins = [
+                        origin.strip() for origin in cors_origins.split(",")
+                    ]
+                    if origin in allowed_origins:
+                        response.headers["Access-Control-Allow-Origin"] = origin
+
+                response.headers[
+                    "Access-Control-Allow-Methods"
+                ] = "GET, POST, PUT, DELETE, OPTIONS"
+                response.headers[
+                    "Access-Control-Allow-Headers"
+                ] = "Content-Type, Authorization, Access-Control-Request-Method, Access-Control-Request-Headers"
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+        return response
+
+    # Handle preflight requests
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            cors_origins = os.environ.get("GUNTER_CORS_ORIGINS")
+            if cors_origins:
+                origin = request.headers.get("Origin")
+                response = jsonify()
+                response.status_code = 200
+                if origin:
+                    if cors_origins == "*":
+                        response.headers["Access-Control-Allow-Origin"] = "*"
+                    else:
+                        allowed_origins = [
+                            origin.strip() for origin in cors_origins.split(",")
+                        ]
+                        if origin in allowed_origins:
+                            response.headers["Access-Control-Allow-Origin"] = origin
+
+                    response.headers[
+                        "Access-Control-Allow-Methods"
+                    ] = "GET, POST, PUT, DELETE, OPTIONS"
+                    response.headers[
+                        "Access-Control-Allow-Headers"
+                    ] = "Content-Type, Authorization, Access-Control-Request-Method, Access-Control-Request-Headers"
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                return response
+
+    # --- OpenAPI/Swagger Setup ---
+    api = Api(
+        app,
+        version="1.0",
+        title="Gunter API",
+        description="API for Geolocation, WHOIS queries, and Reverse DNS",
+        doc=(
+            "/api/docs" if config.ENABLE_API_DOCS else False
+        ),  # Disable Swagger UI if not enabled
+        prefix="/api",
     )
-    @geo_ns.marshal_with(geo_lookup_model, skip_none=True, code=200)
-    def get(self, ip):
-        """
-        Performs a GeoLite2 IP lookup.
-        Returns detailed geo information and optional WHOIS data.
-        """
-        if not db_manager.mmdb_reader:
-            # Handle database not available case
-            return geo_ns.abort(
-                503, error="GeoLite2 database not available. Please try again later."
-            )
 
-        # Check for invalid IP format first
-        try:
-            ipaddress.ip_address(ip)
-        except ValueError:
-            # Invalid IP format
-            return geo_ns.abort(400, error="Invalid IP address format.")
+    # Define namespaces for different endpoints
+    geo_ns = Namespace("geo-lookup", description="Geolocation endpoint")
+    whois_ns = Namespace("whois", description="WHOIS query endpoint")
+    api.add_namespace(geo_ns)
+    api.add_namespace(whois_ns)
 
-        # Check if record exists
-        record = db_manager.mmdb_reader.get(ip)
-        if not record:
-            log.info(f"IP address not found in database: {ip}")
-            return geo_ns.abort(404, error="IP address not found in the database.")
+    if config.ENABLE_STATUS_ENDPOINT:
+        status_ns = Namespace("status", description="Status endpoint")
+        api.add_namespace(status_ns)
 
-        try:
-            # Use lang from query param, fallback to config default
-            lang = request.args.get("lang", config.DEFAULT_LANG).lower()
-            record_dict: Dict[str, Any] = {}
-            if record and isinstance(record, dict):
-                for key, value in record.items():
-                    record_dict[key] = value
-            processed_record = filter_names_by_lang(record_dict, lang)
-            processed_record = cast(Dict[str, Any], processed_record)
+    # --- Models ---
+    database_status_model = api.model(
+        "DatabaseStatus",
+        {
+            "database_loaded": fields.Boolean(
+                description="Indicates if the database is loaded"
+            ),
+            "last_database_update_check_utc": fields.String(
+                description="Timestamp of the last database update check"
+            ),
+            "current_database_version_tag": fields.String(
+                description="Current database version"
+            ),
+            "current_database_file": fields.String(
+                description="Currently used database file"
+            ),
+        },
+    )
 
-            processed_record["database_info"] = {
-                "last_updated_utc": (
-                    db_manager.last_db_update_time.isoformat()
-                    if db_manager.last_db_update_time
-                    else "N/A"
-                ),
-                "version_tag": db_manager.current_db_version_tag,
+    whois_data_model = api.model(
+        "WhoisData",
+        {
+            "target": fields.String(
+                description="Target of the WHOIS query (IP or domain)"
+            ),
+            "lookup_timestamp": fields.String(description="Query timestamp"),
+            "ip_whois": fields.Raw(description="WHOIS data for IP addresses"),
+            "domain_whois": fields.Raw(description="WHOIS data for domains"),
+            "reverse_dns": fields.String(
+                description="Reverse DNS result (if available)"
+            ),
+        },
+    )
+
+    geo_lookup_model = api.model(
+        "GeoLookup",
+        {
+            "city": fields.Raw(description="City information"),
+            "country": fields.Raw(description="Country information"),
+            "continent": fields.Raw(description="Continent information"),
+            "location": fields.Raw(description="Location information (coordinates)"),
+            "postal": fields.Raw(description="Postal code information"),
+            "subdivisions": fields.Raw(
+                description="Subdivisions information (states, provinces)"
+            ),
+            "registered_country": fields.Raw(
+                description="Registered country information"
+            ),
+            "database_info": fields.Raw(description="Database status information"),
+            "whois_data": fields.Nested(
+                whois_data_model, description="WHOIS data (optional)"
+            ),
+        },
+    )
+
+    # --- API Resources ---
+    @geo_ns.route("/<string:ip>")
+    @geo_ns.doc(
+        params={"ip": "IP address for geolocation"},
+        responses={
+            200: "Success",
+            400: "Invalid IP address",
+            404: "IP address not found",
+            503: "GeoLite2 database not available",
+        },
+    )
+    class GeoLookup(Resource):
+        @geo_ns.doc(
+            params={
+                "lang": "Language code for the response (e.g., de, en, fr)",
+                "exclude_whois": "If true, WHOIS data will be excluded from the response",
             }
+        )
+        @geo_ns.marshal_with(geo_lookup_model, skip_none=True, code=200)
+        def get(self, ip):
+            if not db_manager.mmdb_reader:
+                return geo_ns.abort(
+                    503,
+                    error="GeoLite2 database not available. Please try again later.",
+                )
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                return geo_ns.abort(400, error="Invalid IP address format.")
+            record = db_manager.mmdb_reader.get(ip)
+            if not record:
+                log.info(f"IP address not found in database: {ip}")
+                return geo_ns.abort(404, error="IP address not found in the database.")
+            try:
+                lang = request.args.get("lang", config.DEFAULT_LANG).lower()
+                record_dict: Dict[str, Any] = {}
+                if record and isinstance(record, dict):
+                    for key, value in record.items():
+                        record_dict[key] = value
+                processed_record = filter_names_by_lang(record_dict, lang)
+                processed_record = cast(Dict[str, Any], processed_record)
+                processed_record["database_info"] = {
+                    "last_updated_utc": (
+                        db_manager.last_db_update_time.isoformat()
+                        if db_manager.last_db_update_time
+                        else "N/A"
+                    ),
+                    "version_tag": db_manager.current_db_version_tag,
+                }
+                if request.args.get("exclude_whois", "false").lower() != "true":
+                    log.info(f"Including WHOIS data for IP: {ip}")
+                    processed_record["whois_data"] = whois_service.get_whois_data(ip)
+                log.info(f"Lookup for IP: {ip}, Lang: {lang} successful.")
+                return processed_record
+            except Exception as e:
+                log.error(f"Error during IP lookup for {ip}: {e}")
+                response = jsonify({"error": "An internal server error occurred."})
+                response.status_code = 500
+                return response
 
-            if request.args.get("exclude_whois", "false").lower() != "true":
-                log.info(f"Including WHOIS data for IP: {ip}")
-                processed_record["whois_data"] = whois_service.get_whois_data(ip)
+    if config.ENABLE_STATUS_ENDPOINT:
 
-            log.info(f"Lookup for IP: {ip}, Lang: {lang} successful.")
-            return processed_record
-        except Exception as e:
-            log.error(f"Error during IP lookup for {ip}: {e}")
-            response = jsonify({"error": "An internal server error occurred."})
-            response.status_code = 500
-            return response
+        @status_ns.route("")
+        class Status(Resource):
+            @status_ns.marshal_with(database_status_model)
+            def get(self):
+                return db_manager.get_status()
 
+    @whois_ns.route("/<string:target>")
+    @whois_ns.doc(
+        params={"target": "IP address or domain name for the WHOIS query"},
+        responses={200: "Success", 500: "Internal server error"},
+    )
+    class WhoisLookup(Resource):
+        @whois_ns.marshal_with(whois_data_model, skip_none=True)
+        def get(self, target):
+            try:
+                whois_data = whois_service.get_whois_data(target)
+                return whois_data
+            except Exception as e:
+                log.error(f"Error during WHOIS lookup for {target}: {e}")
+                whois_ns.abort(500, error="An internal server error occurred.")
 
-if config.ENABLE_STATUS_ENDPOINT:
+    return app
 
-    @status_ns.route("")
-    class Status(Resource):
-        @status_ns.marshal_with(database_status_model)
-        def get(self):
-            """API endpoint to retrieve the current status of the GeoLite2 database."""
-            return db_manager.get_status()
-
-
-@whois_ns.route("/<string:target>")
-@whois_ns.doc(
-    params={"target": "IP address or domain name for the WHOIS query"},
-    responses={200: "Success", 500: "Internal server error"},
-)
-class WhoisLookup(Resource):
-    @whois_ns.marshal_with(whois_data_model, skip_none=True)
-    def get(self, target):
-        """
-        API endpoint for a WHOIS lookup for an IP or domain.
-        Provides detailed WHOIS information and, if an IP address is specified, reverse DNS data.
-        """
-        try:
-            whois_data = whois_service.get_whois_data(target)
-            return whois_data
-        except Exception as e:
-            log.error(f"Error during WHOIS lookup for {target}: {e}")
-            whois_ns.abort(500, error="An internal server error occurred.")
-
-
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    func=db_manager.check_for_new_release_and_update,
-    trigger="interval",
-    days=config.SCHEDULER_UPDATE_DAYS,
-    id="daily_db_update",
-)
 
 if __name__ == "__main__":
+    app = create_app()
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        func=db_manager.check_for_new_release_and_update,
+        trigger="interval",
+        days=Config.SCHEDULER_UPDATE_DAYS,
+        id="daily_db_update",
+    )
     log.info("Performing initial database download on startup...")
     db_manager.download_and_load_database()
     log.info("Initial database load complete.")
-
     scheduler.start()
     log.info(
-        f"Scheduler started. Checking every {config.SCHEDULER_UPDATE_DAYS} day(s)."
+        f"Scheduler started. Checking every {Config.SCHEDULER_UPDATE_DAYS} day(s)."
     )
-
     log.info(
-        f"Starting Flask app with Waitress on http://{config.FLASK_HOST}:{config.FLASK_PORT}"
+        f"Starting Flask app with Waitress on http://{Config.FLASK_HOST}:{Config.FLASK_PORT}"
     )
-    serve(app, host=config.FLASK_HOST, port=config.FLASK_PORT)
+    serve(app, host=Config.FLASK_HOST, port=Config.FLASK_PORT)

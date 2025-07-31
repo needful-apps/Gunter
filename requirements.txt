@@ -8,3 +8,4 @@ rich>=13.7.0
 python-whois>=0.8.0
 ipwhois>=1.2.0
 waitress>=2.2.0
+flask-cors
