@@ -220,17 +220,25 @@ class GeoDBManager:
         self.mmdb_reader = None
 
     def check_for_new_release_and_update(self):
-        """Checks for a new version and updates if necessary. Skips if EXTERNAL_DB_URL or CUSTOM_DB_FILE is set."""
-        if self.config.EXTERNAL_DB_URL or self.config.CUSTOM_DB_FILE:
-            log.info(
-                "External or custom DB set. Skipping automatic MaxMind update check."
-            )
+        """Checks for a new version and updates if necessary.
+        For external URLs and MaxMind, re-downloads the database.
+        Skips if CUSTOM_DB_FILE is set (local file)."""
+        if self.config.CUSTOM_DB_FILE:
+            log.info("Custom DB file set. Skipping automatic update check.")
             return
-        # This method would need to be adapted if we want to update from MaxMind directly
-        # For now, it's a placeholder or would need a different mechanism (e.g., checking MaxMind's site)
-        log.info(
-            "Automatic update check is only supported for the legacy GitHub repository method and is currently bypassed."
-        )
+
+        # For external URL or MaxMind, re-download to get the latest version
+        if self.config.EXTERNAL_DB_URL or (
+            self.config.MAXMIND_LICENSE_KEY and self.config.MAXMIND_DOWNLOAD_URL
+        ):
+            log.info("Checking for database updates...")
+            self.download_and_load_database()
+            log.info("Database update check completed.")
+        else:
+            log.info(
+                "No external URL or MaxMind license key configured. "
+                "Skipping automatic update check."
+            )
 
     def get_status(self) -> Dict[str, Any]:
         """Returns the current status of the database."""
@@ -365,23 +373,24 @@ def create_app():
         cors_origins = os.environ.get("GUNTER_CORS_ORIGINS")
         if cors_origins:
             origin = request.headers.get("Origin")
-            if origin:
-                if cors_origins == "*":
-                    response.headers["Access-Control-Allow-Origin"] = "*"
-                else:
-                    allowed_origins = [
-                        origin.strip() for origin in cors_origins.split(",")
-                    ]
-                    if origin in allowed_origins:
-                        response.headers["Access-Control-Allow-Origin"] = origin
+            # Always add CORS headers when CORS is enabled
+            if cors_origins == "*":
+                response.headers["Access-Control-Allow-Origin"] = "*"
+            elif origin:
+                allowed_origins = [origin.strip() for origin in cors_origins.split(",")]
+                if origin in allowed_origins:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
 
-                response.headers["Access-Control-Allow-Methods"] = (
-                    "GET, POST, PUT, DELETE, OPTIONS"
-                )
-                response.headers["Access-Control-Allow-Headers"] = (
-                    "Content-Type, Authorization, Access-Control-Request-Method, Access-Control-Request-Headers"
-                )
-                response.headers["Access-Control-Allow-Credentials"] = "true"
+            # Add these headers for all CORS-enabled responses
+            response.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            response.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Authorization, "
+                "Access-Control-Request-Method, "
+                "Access-Control-Request-Headers"
+            )
         return response
 
     # Handle preflight requests
@@ -393,23 +402,26 @@ def create_app():
                 origin = request.headers.get("Origin")
                 response = jsonify()
                 response.status_code = 200
-                if origin:
-                    if cors_origins == "*":
-                        response.headers["Access-Control-Allow-Origin"] = "*"
-                    else:
-                        allowed_origins = [
-                            origin.strip() for origin in cors_origins.split(",")
-                        ]
-                        if origin in allowed_origins:
-                            response.headers["Access-Control-Allow-Origin"] = origin
 
-                    response.headers["Access-Control-Allow-Methods"] = (
-                        "GET, POST, PUT, DELETE, OPTIONS"
-                    )
-                    response.headers["Access-Control-Allow-Headers"] = (
-                        "Content-Type, Authorization, Access-Control-Request-Method, Access-Control-Request-Headers"
-                    )
-                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                # Always add CORS headers for OPTIONS when CORS is enabled
+                if cors_origins == "*":
+                    response.headers["Access-Control-Allow-Origin"] = "*"
+                elif origin:
+                    allowed_origins = [
+                        origin.strip() for origin in cors_origins.split(",")
+                    ]
+                    if origin in allowed_origins:
+                        response.headers["Access-Control-Allow-Origin"] = origin
+                        response.headers["Access-Control-Allow-Credentials"] = "true"
+
+                response.headers["Access-Control-Allow-Methods"] = (
+                    "GET, POST, PUT, DELETE, OPTIONS"
+                )
+                response.headers["Access-Control-Allow-Headers"] = (
+                    "Content-Type, Authorization, "
+                    "Access-Control-Request-Method, "
+                    "Access-Control-Request-Headers"
+                )
                 return response
 
     # --- OpenAPI/Swagger Setup ---
