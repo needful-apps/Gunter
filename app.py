@@ -365,23 +365,26 @@ def create_app():
         cors_origins = os.environ.get("GUNTER_CORS_ORIGINS")
         if cors_origins:
             origin = request.headers.get("Origin")
-            if origin:
-                if cors_origins == "*":
-                    response.headers["Access-Control-Allow-Origin"] = "*"
-                else:
-                    allowed_origins = [
-                        origin.strip() for origin in cors_origins.split(",")
-                    ]
-                    if origin in allowed_origins:
-                        response.headers["Access-Control-Allow-Origin"] = origin
+            # Always add CORS headers when CORS is enabled
+            if cors_origins == "*":
+                response.headers["Access-Control-Allow-Origin"] = "*"
+            elif origin:
+                allowed_origins = [
+                    origin.strip() for origin in cors_origins.split(",")
+                ]
+                if origin in allowed_origins:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
 
-                response.headers["Access-Control-Allow-Methods"] = (
-                    "GET, POST, PUT, DELETE, OPTIONS"
-                )
-                response.headers["Access-Control-Allow-Headers"] = (
-                    "Content-Type, Authorization, Access-Control-Request-Method, Access-Control-Request-Headers"
-                )
-                response.headers["Access-Control-Allow-Credentials"] = "true"
+            # Add these headers for all CORS-enabled responses
+            response.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            response.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Authorization, "
+                "Access-Control-Request-Method, "
+                "Access-Control-Request-Headers"
+            )
         return response
 
     # Handle preflight requests
@@ -393,23 +396,26 @@ def create_app():
                 origin = request.headers.get("Origin")
                 response = jsonify()
                 response.status_code = 200
-                if origin:
-                    if cors_origins == "*":
-                        response.headers["Access-Control-Allow-Origin"] = "*"
-                    else:
-                        allowed_origins = [
-                            origin.strip() for origin in cors_origins.split(",")
-                        ]
-                        if origin in allowed_origins:
-                            response.headers["Access-Control-Allow-Origin"] = origin
 
-                    response.headers["Access-Control-Allow-Methods"] = (
-                        "GET, POST, PUT, DELETE, OPTIONS"
-                    )
-                    response.headers["Access-Control-Allow-Headers"] = (
-                        "Content-Type, Authorization, Access-Control-Request-Method, Access-Control-Request-Headers"
-                    )
-                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                # Always add CORS headers for OPTIONS when CORS is enabled
+                if cors_origins == "*":
+                    response.headers["Access-Control-Allow-Origin"] = "*"
+                elif origin:
+                    allowed_origins = [
+                        origin.strip() for origin in cors_origins.split(",")
+                    ]
+                    if origin in allowed_origins:
+                        response.headers["Access-Control-Allow-Origin"] = origin
+                        response.headers["Access-Control-Allow-Credentials"] = "true"
+
+                response.headers["Access-Control-Allow-Methods"] = (
+                    "GET, POST, PUT, DELETE, OPTIONS"
+                )
+                response.headers["Access-Control-Allow-Headers"] = (
+                    "Content-Type, Authorization, "
+                    "Access-Control-Request-Method, "
+                    "Access-Control-Request-Headers"
+                )
                 return response
 
     # --- OpenAPI/Swagger Setup ---
