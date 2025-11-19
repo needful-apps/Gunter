@@ -224,9 +224,7 @@ class GeoDBManager:
         For external URLs and MaxMind, re-downloads the database.
         Skips if CUSTOM_DB_FILE is set (local file)."""
         if self.config.CUSTOM_DB_FILE:
-            log.info(
-                "Custom DB file set. Skipping automatic update check."
-            )
+            log.info("Custom DB file set. Skipping automatic update check.")
             return
 
         # For external URL or MaxMind, re-download to get the latest version
@@ -379,9 +377,7 @@ def create_app():
             if cors_origins == "*":
                 response.headers["Access-Control-Allow-Origin"] = "*"
             elif origin:
-                allowed_origins = [
-                    origin.strip() for origin in cors_origins.split(",")
-                ]
+                allowed_origins = [origin.strip() for origin in cors_origins.split(",")]
                 if origin in allowed_origins:
                     response.headers["Access-Control-Allow-Origin"] = origin
                     response.headers["Access-Control-Allow-Credentials"] = "true"
