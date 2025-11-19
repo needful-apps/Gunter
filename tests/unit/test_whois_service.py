@@ -65,7 +65,8 @@ class TestWhoisService:
     @mock.patch("app.whois.whois")
     def test_get_domain_whois_success(self, mock_whois, whois_service):
         """Test successful domain WHOIS lookup."""
-        # Setup mock response - erstelle ein Dictionary, das dem Ergebnis von whois.whois() entspricht
+        # Setup mock response - erstelle ein Dictionary,
+        # das dem Ergebnis von whois.whois() entspricht
         from datetime import datetime
 
         # Das neue whois.whois() gibt ein Dictionary zurück, kein Objekt

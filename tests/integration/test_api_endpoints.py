@@ -2,7 +2,6 @@ import json
 from unittest import mock
 
 import pytest
-from flask import Flask
 
 # Importiere die App-Erstellungslogik, aber nicht die globale Instanz
 from app import create_app, db_manager, whois_service

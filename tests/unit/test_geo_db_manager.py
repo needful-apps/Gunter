@@ -3,11 +3,10 @@ import tempfile
 from datetime import datetime
 from unittest import mock
 
-import maxminddb
 import pytest
 import requests
 
-from app import Config, GeoDBManager
+from app import GeoDBManager
 
 
 @pytest.fixture
@@ -125,7 +124,8 @@ class TestGeoDBManager:
         assert manager.current_db_file_path is None
 
     def test_check_for_new_release_new_version(self, mock_config):
-        """Test checking for a new release when EXTERNAL_DB_URL and CUSTOM_DB_FILE are not set."""
+        """Test checking for new release when EXTERNAL_DB_URL and
+        CUSTOM_DB_FILE are not set."""
         # Create the manager
         manager = GeoDBManager(mock_config)
         manager.current_db_version_tag = "v1.0.0"
@@ -141,7 +141,8 @@ class TestGeoDBManager:
         manager.download_and_load_database.assert_not_called()
 
     def test_check_for_new_release_same_version(self, mock_config):
-        """Test checking for a new release when the current version is up to date (method now just logs)."""
+        """Test checking for new release when current version is
+        up to date (method now just logs)."""
         # Create the manager and set current version
         manager = GeoDBManager(mock_config)
         manager.current_db_version_tag = "v1.0.0"
