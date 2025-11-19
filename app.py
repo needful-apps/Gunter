@@ -220,17 +220,27 @@ class GeoDBManager:
         self.mmdb_reader = None
 
     def check_for_new_release_and_update(self):
-        """Checks for a new version and updates if necessary. Skips if EXTERNAL_DB_URL or CUSTOM_DB_FILE is set."""
-        if self.config.EXTERNAL_DB_URL or self.config.CUSTOM_DB_FILE:
+        """Checks for a new version and updates if necessary.
+        For external URLs and MaxMind, re-downloads the database.
+        Skips if CUSTOM_DB_FILE is set (local file)."""
+        if self.config.CUSTOM_DB_FILE:
             log.info(
-                "External or custom DB set. Skipping automatic MaxMind update check."
+                "Custom DB file set. Skipping automatic update check."
             )
             return
-        # This method would need to be adapted if we want to update from MaxMind directly
-        # For now, it's a placeholder or would need a different mechanism (e.g., checking MaxMind's site)
-        log.info(
-            "Automatic update check is only supported for the legacy GitHub repository method and is currently bypassed."
-        )
+
+        # For external URL or MaxMind, re-download to get the latest version
+        if self.config.EXTERNAL_DB_URL or (
+            self.config.MAXMIND_LICENSE_KEY and self.config.MAXMIND_DOWNLOAD_URL
+        ):
+            log.info("Checking for database updates...")
+            self.download_and_load_database()
+            log.info("Database update check completed.")
+        else:
+            log.info(
+                "No external URL or MaxMind license key configured. "
+                "Skipping automatic update check."
+            )
 
     def get_status(self) -> Dict[str, Any]:
         """Returns the current status of the database."""
