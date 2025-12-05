@@ -504,10 +504,10 @@ def create_app():
     # --- API Resources ---
     @geo_ns.route("/<string:ip>")
     @geo_ns.doc(
-        params={"ip": "IP address for geolocation"},
+        params={"ip": "IP address or domain name for geolocation"},
         responses={
             200: "Success",
-            400: "Invalid IP address",
+            400: "Invalid IP address or domain name",
             404: "IP address not found",
             503: "GeoLite2 database not available",
         },
@@ -526,10 +526,28 @@ def create_app():
                     503,
                     error="GeoLite2 database not available. Please try again later.",
                 )
+
+            # Store original input for error messages and whois lookups
+            original_input = ip
+            is_domain = False
+
+            # Try to validate as IP address first
             try:
                 ipaddress.ip_address(ip)
             except ValueError:
-                return geo_ns.abort(400, error="Invalid IP address format.")
+                # Not a valid IP, try to resolve as domain name
+                is_domain = True
+                try:
+                    resolved_ip = socket.gethostbyname(ip)
+                    log.info(f"Resolved domain {ip} to IP {resolved_ip}")
+                    ip = resolved_ip
+                except (socket.gaierror, socket.herror) as e:
+                    log.error(f"Failed to resolve domain {ip}: {e}")
+                    return geo_ns.abort(
+                        400,
+                        error=f"Invalid IP address or unable to resolve domain name: {original_input}",
+                    )
+
             record = db_manager.mmdb_reader.get(ip)
             if not record:
                 log.info(f"IP address not found in database: {ip}")
@@ -551,8 +569,12 @@ def create_app():
                     "version_tag": db_manager.current_db_version_tag,
                 }
                 if request.args.get("exclude_whois", "false").lower() != "true":
-                    log.info(f"Including WHOIS data for IP: {ip}")
-                    processed_record["whois_data"] = whois_service.get_whois_data(ip)
+                    # Use original domain for WHOIS if input was a domain, otherwise use resolved IP
+                    whois_target = original_input if is_domain else ip
+                    log.info(f"Including WHOIS data for: {whois_target}")
+                    processed_record["whois_data"] = whois_service.get_whois_data(
+                        whois_target
+                    )
                 log.info(f"Lookup for IP: {ip}, Lang: {lang} successful.")
                 return processed_record
             except Exception as e:
