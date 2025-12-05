@@ -1,4 +1,5 @@
 import json
+import socket
 from unittest import mock
 
 import pytest
@@ -85,24 +86,115 @@ class TestAPIEndpoints:
         assert "not found" in data["error"].lower()
 
     @mock.patch.object(db_manager, "mmdb_reader")
-    @mock.patch.object(whois_service, "get_whois_data")
-    def test_geo_lookup_invalid_ip(self, mock_whois_data, mock_reader, client):
-        """Test geo lookup with invalid IP format."""
-        # Make sure the reader is not None, so we reach the ValueError part
-        # If mock_reader were None, we would immediately return 503
-        mock_reader.get.side_effect = ValueError("Invalid IP address")
-        # Whois should not be called, but we mock it anyway for safety
+    @mock.patch("app.socket.gethostbyname")
+    def test_geo_lookup_invalid_domain(self, mock_gethostbyname, mock_reader, client):
+        """Test geo lookup with invalid domain that cannot be resolved."""
+        # Mock socket.gethostbyname to raise an exception for unresolvable domain
+        mock_gethostbyname.side_effect = socket.gaierror("Name or service not known")
 
-        # Make the request with invalid IP
-        response = client.get("/api/geo-lookup/invalid-ip")
+        # Make the request with invalid domain
+        response = client.get("/api/geo-lookup/invalid-domain.local")
 
         # Assertions
         assert response.status_code == 400
         data = json.loads(response.data)
         assert "error" in data
-        assert "invalid ip" in data["error"].lower()
+        assert "unable to resolve" in data["error"].lower()
 
-        # Whois should not have been called since validation fails earlier
+    @mock.patch.object(db_manager, "mmdb_reader")
+    @mock.patch.object(db_manager, "last_db_update_time")
+    @mock.patch.object(db_manager, "current_db_version_tag")
+    @mock.patch.object(whois_service, "get_whois_data")
+    @mock.patch("app.socket.gethostbyname")
+    def test_geo_lookup_with_domain(
+        self,
+        mock_gethostbyname,
+        mock_whois_data,
+        mock_version_tag,
+        mock_last_update,
+        mock_reader,
+        client,
+    ):
+        """Test successful geo lookup with a domain name."""
+        from datetime import datetime
+
+        # Setup mocks
+        mock_gethostbyname.return_value = "93.184.216.34"  # example.com IP
+        mock_version_tag.__str__ = mock.MagicMock(return_value="v1.0.0")
+        mock_last_update = datetime(2023, 1, 1, 0, 0, 0)
+        db_manager.last_db_update_time = mock_last_update
+        db_manager.current_db_version_tag = "v1.0.0"
+        mock_reader.get.return_value = {
+            "city": {"names": {"en": "Norwell", "de": "Norwell"}},
+            "country": {"names": {"en": "United States", "de": "Vereinigte Staaten"}},
+        }
+        mock_whois_data.return_value = {
+            "target": "example.com",
+            "lookup_timestamp": "2023-01-01T00:00:00",
+            "domain_whois": {"domain_name": "EXAMPLE.COM"},
+        }
+
+        # Make the request with domain name
+        response = client.get("/api/geo-lookup/example.com?lang=en")
+
+        # Assertions
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert "city" in data
+        assert data["city"].get("name") == "Norwell"
+        assert "country" in data
+        assert data["country"].get("name") == "United States"
+        assert "database_info" in data
+
+        # Verify domain was resolved to IP
+        mock_gethostbyname.assert_called_once_with("example.com")
+        # Verify geo lookup was done on resolved IP
+        mock_reader.get.assert_called_once_with("93.184.216.34")
+        # Verify WHOIS was called with the original domain, not the IP
+        mock_whois_data.assert_called_once_with("example.com")
+
+    @mock.patch.object(db_manager, "mmdb_reader")
+    @mock.patch.object(db_manager, "last_db_update_time")
+    @mock.patch.object(db_manager, "current_db_version_tag")
+    @mock.patch.object(whois_service, "get_whois_data")
+    @mock.patch("app.socket.gethostbyname")
+    def test_geo_lookup_domain_exclude_whois(
+        self,
+        mock_gethostbyname,
+        mock_whois_data,
+        mock_version_tag,
+        mock_last_update,
+        mock_reader,
+        client,
+    ):
+        """Test geo lookup with domain name and exclude_whois=true."""
+        from datetime import datetime
+
+        # Setup mocks
+        mock_gethostbyname.return_value = "93.184.216.34"
+        mock_version_tag.__str__ = mock.MagicMock(return_value="v1.0.0")
+        mock_last_update = datetime(2023, 1, 1, 0, 0, 0)
+        db_manager.last_db_update_time = mock_last_update
+        db_manager.current_db_version_tag = "v1.0.0"
+        mock_reader.get.return_value = {
+            "city": {"names": {"en": "Norwell"}},
+            "country": {"names": {"en": "United States"}},
+        }
+
+        # Make the request with domain name and exclude_whois
+        response = client.get("/api/geo-lookup/example.com?exclude_whois=true")
+
+        # Assertions
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        # The API marshaller may include the whois_data field with None values due to the model definition
+        # The key check is that get_whois_data was not called
+        assert "city" in data
+        assert "country" in data
+
+        # Verify domain was resolved
+        mock_gethostbyname.assert_called_once_with("example.com")
+        # Verify WHOIS was NOT called - this is the important check
         mock_whois_data.assert_not_called()
 
     @mock.patch.object(db_manager, "get_status")
