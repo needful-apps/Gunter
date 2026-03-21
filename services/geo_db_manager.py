@@ -180,7 +180,10 @@ class GeoDBManager:
                 self.config.DB_DIR, f"GeoLite2-City-{timestamp}.mmdb"
             )
             with open(extracted_path, "wb") as out_f:
-                out_f.write(tar.extractfile(mmdb_member).read())
+                mmdb_file = tar.extractfile(mmdb_member)
+                if mmdb_file is None:
+                    raise RuntimeError("Could not extract .mmdb file from archive!")
+                out_f.write(mmdb_file.read())
 
         log.info(f"Extracted MMDB: {extracted_path}")
         return extracted_path

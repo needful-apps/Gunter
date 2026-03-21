@@ -124,10 +124,11 @@ def register_resources(
                 log.error(f"Error during WHOIS lookup for {target}: {e}")
                 whois_ns.abort(500, error="An internal server error occurred.")
 
-    if status_ns:
+    if status_ns is not None:
+        _status_ns = status_ns
 
-        @status_ns.route("")
+        @_status_ns.route("")
         class Status(Resource):
-            @status_ns.marshal_with(models["database_status"])
+            @_status_ns.marshal_with(models["database_status"])
             def get(self):
                 return db_manager.get_status()
